@@ -1,147 +1,130 @@
-# CloudNow
+# KhmNow - GeForce NOW tvOS Client (Thailand)
 
-A native GeForce NOW client for Apple TV. Stream your entire PC game library directly on tvOS with full controller support, no browser, no workarounds.
+KhmNow is a tvOS client for GeForce NOW Thailand, featuring code and design patterns forked from the excellent [CloudNow](https://github.com/owenselles/CloudNow) project by [owenselles](https://github.com/owenselles). This community-driven wrapper brings GeForce NOW streaming directly to your Apple TV with native tvOS controls, liquid glass visual interfaces, and custom controller mappings.
 
-> **Personal use / sideload only.** This project is not affiliated with, endorsed by, or sponsored by NVIDIA. NVIDIA and GeForce NOW are trademarks of NVIDIA Corporation.
-
-> [!WARNING]
-> CloudNow is under active development. Expect bugs, lots of them
-
-
-
+> [!IMPORTANT]
+> **Independent Community Project:** This project is entirely independent and is **NOT** sponsored, affiliated, or endorsed by NVIDIA, Pentavalent (the GeForce NOW operator in Thailand), or any other commercial entity. It is provided for personal, non-commercial use only.
 
 ---
 
 ## Features
 
-- **Tab bar navigation** — Home, Library, Store, and Settings; fully focus-engine compatible
-- **Home screen** — "Continue Playing" row powered by live active sessions, plus a Favorites row
-- **Library & Store** — browse your linked games separately from the full public catalog; Library and Store both have search; Library supports A→Z, Z→A, and Recently Played sort orders; long-press any card to add/remove from Favorites
-- **Stream quality settings** — resolution up to 4K (tier-dependent), frame rate, codec (H.264/H.265/AV1), color quality (SDR/HDR), keyboard layout, game language, and Low Latency Mode (L4S) from the Settings tab
-- **Codec-aware SDP negotiation** — offer is filtered to your chosen codec before WebRTC negotiation; H.265 prefers Main profile; bandwidth hints sent to prevent server overshoot
-- **Session queue UI** — shows queue phase ("In queue · Position X" → "Preparing your game"); waits indefinitely in queue with position updates; 180-second setup timeout after queue clears; requires two consecutive ready polls before presenting the stream; plays mandatory queue ads via AVPlayer and reports lifecycle events back to CloudMatch
-- **Zone/region selection** — Settings → Server Region shows live queue depths and ping per zone; Automatic mode picks the best zone by weighted score (40% ping + 60% queue depth); powered by the PrintedWaste community API
-- **Microphone support** — voice chat via AirPods or any Bluetooth headset; toggle in Settings; permission requested on first use
-- **Favorites** — long-press any game card in Library or Store to add/remove from Favorites; persisted locally
-- **Full GFN streaming** — WebRTC-based, up to 4K@60fps depending on your GFN plan (tvOS caps at 60 Hz; 120fps ready for when Apple raises the limit)
-- **Controller support** — up to 4 simultaneous MFi/Xbox/PlayStation controllers via the GameController framework; configurable analog stick deadzone (5–30%) and overlay trigger button (Start/≡ or Options/Back ⊟, default: Start)
-- **NVIDIA OAuth login** — device flow; TV shows a QR code and PIN; complete sign-in on any phone, tablet, or computer
-- **Live stats overlay** — bitrate, resolution, FPS, RTT, real packet loss %, and remaining session time (Free/Priority tier) — toggle with Play/Pause (Siri Remote) or long-press the overlay button (controller, default: Start/≡, configurable in Settings)
-- **Keychain persistence** — session tokens stored securely and auto-refreshed on launch
-
-## Requirements
-
-- Apple TV 4K (2nd generation or later) running tvOS 17+
-- Xcode 16+ on a Mac
-- Active GeForce NOW account (Free, Priority, or Ultimate)
-- Apple Developer account (free tier works for sideloading)
-
-## Getting Started
-
-### 1. Clone
-
-```bash
-git clone https://github.com/owenselles/CloudNow.git
-cd CloudNow
-```
-
-### 2. Add the WebRTC package
-
-Open `CloudNow.xcodeproj` in Xcode, then:
-
-**File → Add Package Dependencies…**
-Paste: `https://github.com/livekit/webrtc-xcframework`
-Target: **WebRTC**
-
-### 3. Set your Team
-
-Copy the local config template and fill in your Apple Developer Team ID:
-
-```bash
-cp Local.xcconfig.example Local.xcconfig
-```
-
-Edit `Local.xcconfig` and replace `YOUR_TEAM_ID_HERE` with your Team ID (find it at [developer.apple.com](https://developer.apple.com) → Account → Membership).
-
-Then attach it to the project in Xcode:
-**Project navigator → CloudNow project → Info tab → Configurations → expand Debug and Release → set "Based on" to `Local.xcconfig`** for both.
-
-`Local.xcconfig` is gitignored and should never be committed.
-
-### 4. Build & Run
-
-Select your Apple TV as the run destination (USB-C or network) and hit **⌘R**.
-
-On first launch the app prompts you to sign in. A QR code and PIN are displayed — scan the QR code or visit the URL on any device and enter the PIN to complete sign-in, then return to the TV.
+- **Cozy & Minimal Aesthetics:** A gorgeous, minimal green design optimized for tvOS 26 that blends beautifully with the system UI.
+- **Low Latency Defaults:** Out-of-the-box streaming settings pre-configured for `.lowLatency` (Wi-Fi/Ethernet optimized) connection modes to guarantee the smoothest gameplay.
+- **Dynamic Auto Bitrate:** Automatically scales connection bitrates (up to 75 Mbps for 4K, 50 Mbps for 1080p, and 30 Mbps for 720p) to prevent router bufferbloat and packet drops.
+- **Network Performance Benchmark:** An built-in testing utility in Settings to probe ping, jitter, and packet loss against GeForce NOW Thailand servers, offering side-by-side proposed parameter auto-tuning.
+- **Premium Queue Progress Card:** Glassmorphic queue tracking widget that displays live positions and security slot allocations while handling queue advertisements smoothly.
+- **AVAudioSession Resolution:** Fully resolved Bluetooth HFP/A2DP session management to keep audio output crisp and prevent game sound muting regressions.
+- **Session Recovery & Teardown:** Automatically detects active remote GFN sessions on launch, giving options to seamlessly rejoin or terminate them.
+- **Controller Support:** Full MFi, Xbox, and PlayStation controller mapping with deadzone adjustments (5% - 30%) and customizable Siri Remote settings.
 
 ---
 
-## Architecture
+## Requirements
+
+* **Hardware:** Apple TV 4K (2nd generation or later recommended) or Apple TV HD.
+* **GeForce NOW Account:** An active account with GeForce NOW Thailand (operated by Pentavalent).
+* **Game Controller:** An MFi-certified gamepad, Xbox Series X/S, or PlayStation DualSense controller.
+
+---
+
+## Installation & Setup Guide
+
+Whether you are a casual user looking to install the app or a developer compiling from source, follow the respective guide below.
+
+### Method 1: For Non-Developers (Sideloading using Sideloadly)
+
+Sideloadly is a free tool that lets you install apps (`.ipa` files) on Apple TV using a standard Mac or Windows PC.
+
+#### Step 1: Prep your Apple TV
+1. On your Apple TV, go to **Settings** → **System** → **Software Updates** and ensure you are on the latest tvOS version.
+2. Go to **Settings** → **General** → **Privacy & Security**. Scroll down and make sure **Developer Mode** is visible and **Enabled**. (If not visible, you must pair Xcode first or use Apple Configurator to enable it).
+3. Ensure your Apple TV and your computer are on the same local Wi-Fi or Ethernet network.
+
+#### Step 2: Download Sideloadly
+1. Download and install **Sideloadly** on your Mac or Windows PC from [sideloadly.io](https://sideloadly.io).
+
+#### Step 3: Compile/Obtain the `.ipa`
+1. You can build the `.ipa` from the source using Xcode (see power user instructions below) or download the pre-compiled version from the Releases page.
+
+#### Step 4: Sideload the App
+1. Open Sideloadly.
+2. Connect your Apple TV to your computer. On macOS, go to Xcode → Window → Devices and Simulators to make sure your Apple TV is paired. Once paired, Sideloadly will auto-detect it under **Device**.
+3. Under **Apple Account**, enter your Apple ID email address (your personal free developer account).
+4. Drag and drop the `KhmNow.ipa` file into Sideloadly.
+5. Click **Start**. Sideloadly will ask for your Apple ID password (this is sent securely to Apple to sign the app) and two-factor code.
+6. Once it says **Done**, the **KhmNow** app icon will appear on your Apple TV home screen!
+
+> [!NOTE]
+> Free Apple Developer accounts require apps to be re-signed every **7 days**. Sideloadly can automatically refresh the signature over Wi-Fi if your computer is on and connected to the same network.
+
+---
+
+### Method 2: For Power Users / Developers (Build from Source)
+
+If you want to build the code yourself using Xcode:
+
+#### Step 1: Clone the Repository
+```bash
+git clone https://github.com/jungkung6/KhmNow.git
+cd KhmNow
+```
+
+#### Step 2: Add the WebRTC Package Dependency
+1. Open `khmnow.xcodeproj` in Xcode 16+.
+2. Go to **File** → **Add Package Dependencies...**.
+3. Paste the URL: `https://github.com/livekit/webrtc-xcframework`
+4. Select the target **WebRTC** and click Add Package.
+
+#### Step 3: Configure Signing & Team
+1. In Xcode, click on the **khmnow** project at the top of the left navigator pane.
+2. Select the **khmnow** target under Targets.
+3. Go to the **Signing & Capabilities** tab.
+4. Check **Automatically manage signing**.
+5. Under **Team**, select your Apple Developer Team account (personal accounts work perfectly).
+6. If Xcode displays a bundle identifier conflict error, modify the **Bundle Identifier** field to a unique value (e.g., `com.yourname.khmnow`).
+
+#### Step 4: Run & Deploy
+1. Pair your Apple TV with Xcode over your network: **Xcode → Window → Devices and Simulators** → Pair Apple TV.
+2. Select your paired **Apple TV** as the run destination from the destination selector at the top of Xcode.
+3. Press **Cmd + R** (or click the Play button) to build, sign, and install the app.
+4. Xcode will launch the app on your Apple TV automatically!
+
+---
+
+## Directory Architecture
 
 ```
-CloudNow/
-├── Auth/
-│   ├── AuthManager.swift           @Observable auth state, Keychain persistence
-│   └── NVIDIAAuthAPI.swift         OAuth 2.0 PKCE, token refresh, user info
-├── Session/
-│   ├── SessionState.swift          Models: GameInfo, SessionInfo, StreamSettings
-│   ├── CloudMatchClient.swift      Session create/poll/stop/active-sessions
-│   └── GamesClient.swift           Game catalog via GraphQL persisted query
-├── Streaming/
-│   ├── GFNStreamController.swift   WebRTC peer connection lifecycle (@Observable)
-│   ├── SignalingClient.swift        WebSocket signaling — SDP offer/answer + ICE
-│   ├── SDPMunger.swift             Codec filtering + bandwidth injection for WebRTC SDP
-│   └── InputSender.swift           GCController/keyboard/mouse/Siri Remote → XInput + GFN protocol (v2/v3) → data channel
-├── Video/
-│   └── VideoSurfaceView.swift      AVSampleBufferDisplayLayer video surface + keyboard/mouse first responder
-└── UI/
-    ├── GamesViewModel.swift        Shared @Observable — games, sessions, favorites, settings
-    ├── MainTabView.swift           Root TabView (Home / Library / Store / Settings)
-    ├── HomeView.swift              Hero banner + Continue Playing + Favorites rows
-    ├── LibraryView.swift           LIBRARY panel grid with favorite toggles
-    ├── StoreView.swift             MAIN catalog grid with "In Library" badges
-    ├── SettingsView.swift          Stream quality pickers + account info + sign out
-    ├── LoginView.swift             Sign-in screen with QR code + PIN display
-    └── StreamView.swift            Full-screen player + HUD stats overlay
+KhmNow/
+├── khmnow/
+│   ├── Auth/           # OAuth 2.0 PKCE, token caching, and keychain storage
+│   ├── Session/        # GraphQL catalog fetching and GFN CloudMatch endpoints
+│   ├── Streaming/      # WebRTC PeerConnection, SDP munging, and XInput binary protocols
+│   ├── Video/          # AVSampleBufferDisplayLayer surface handlers
+│   ├── UI/             # HomeView dashboard, premium QueueProgress cards, and SettingsView
+│   └── Assets.xcassets # Parallax 3-layer app icons and brand assets
+├── khmnow.xcodeproj    # Xcode project structure
+├── khmnowTests/        # Test cases (Core clients, input mappings, SDP parsing)
+└── khmnowUITests/      # Integration and layout interface tests
 ```
-
-### Protocol
-
-The GFN streaming protocol was independently reverse-engineered from NVIDIA's network traffic. The WebRTC transport is provided by [livekit/webrtc-xcframework](https://github.com/livekit/webrtc-xcframework).
-
-| Layer | Implementation |
-|-------|---------------|
-| Auth | OAuth 2.0 PKCE → `login.nvidia.com` |
-| Session | REST → CloudMatch (`cloudmatchbeta.nvidiagrid.net`) |
-| Signaling | WebSocket (`/nvst/sign_in`) — SDP offer/answer + ICE |
-| Streaming | WebRTC via [livekit/webrtc-xcframework](https://github.com/livekit/webrtc-xcframework) |
-| Input | XInput binary protocol over WebRTC data channel |
-| Game catalog | GraphQL persisted query → `games.geforce.com` |
 
 ---
 
 ## Known Limitations
 
-- **No App Store.** NVIDIA has not published a public API for third-party GFN clients. Sideloading only.
-- **Queue ad playback.** During high demand GFN shows ads while in queue. The app plays them via AVPlayer and reports lifecycle events (start/pause/finish) back to CloudMatch.
-- **Zone/region selection.** Settings → Server Region lets you pick a specific zone or leave it on Automatic (40% ping + 60% queue depth scoring). Zone list + queue depths fetched from the PrintedWaste community API.
-## Contributing
+- **No App Store Release:** GeForce NOW does not have a public client API. This is a community project and must be sideloaded.
+- **7-day Re-sign limit:** Free accounts expire every 7 days; use Sideloadly or an alt server to auto-refresh the signature.
 
-PRs welcome, especially for:
-
-- macOS Catalyst or visionOS port
-
-## Sponsoring
-
-If this project is useful to you, consider sponsoring to help keep it maintained.
-
-[![GitHub Sponsors](https://img.shields.io/badge/Sponsor%20on%20GitHub-%E2%9D%A4-pink?style=flat-square&logo=github)](https://github.com/sponsors/owenselles)
+---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+---
 
 ## Acknowledgements
 
-- [PrintedWaste](https://printedwaste.com) — community API for GFN zone queue depths and region mapping
-- [livekit/webrtc-xcframework](https://github.com/livekit/webrtc-xcframework) — WebRTC for Apple platforms
+- [owenselles/CloudNow](https://github.com/owenselles/CloudNow) — The original developer whose code forms the layout and architecture foundation for this project.
+- [PrintedWaste](https://printedwaste.com) — Community GFN zone mapping API.
+- [livekit/webrtc-xcframework](https://github.com/livekit/webrtc-xcframework) — High-quality WebRTC wrapper framework.
