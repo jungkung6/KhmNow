@@ -44,11 +44,10 @@ git clone https://github.com/jungkung6/KhmNow.git
 cd KhmNow
 ```
 
-### Step 2: Add the WebRTC Package Dependency
+### Step 2: Open and Resolve Dependencies
 1. Open `khmnow.xcodeproj` in Xcode 26.5+.
-2. Go to **File** → **Add Package Dependencies...**.
-3. Paste the WebRTC library URL: `https://github.com/livekit/webrtc-xcframework`
-4. Select the target **WebRTC** and click Add Package.
+2. Xcode will automatically detect and resolve the **WebRTC** package dependency (from `https://github.com/livekit/webrtc-xcframework`) defined in the project.
+3. Wait for Xcode to finish downloading the WebRTC package (you can track progress in the top status bar). If Xcode fails to resolve it automatically, you can add it manually via **File** → **Add Package Dependencies...** by pasting the URL.
 
 ### Step 3: Configure Signing & Team
 1. In Xcode, select the **khmnow** project at the top of the left navigator pane.
