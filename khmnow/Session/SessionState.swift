@@ -35,7 +35,7 @@ nonisolated struct StreamSettings: Codable, Equatable {
             let resolutionParts = resolution.split(separator: "x")
             let width = Int(resolutionParts.first ?? "1920") ?? 1920
             if width >= 3840 {
-                return 75_000
+                return 300_000
             } else if width >= 1920 {
                 return 50_000
             } else {

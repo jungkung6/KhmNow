@@ -387,18 +387,30 @@ final class GFNStreamController: NSObject {
             for ip in resolvedIps where !allIps.contains(ip) { allIps.append(ip) }
             if !connectedHost.isEmpty, !allIps.contains(connectedHost) { allIps.append(connectedHost) }
 
+            // Resolve gateway server IP and add it to fallback list
+            let gatewayIps = Self.resolveIPs(hostname: session.serverIp)
+            for ip in gatewayIps where !allIps.contains(ip) { allIps.append(ip) }
+
+            let signalingServerHost = session.signalingServer.components(separatedBy: ":").first ?? ""
+            if !signalingServerHost.isEmpty {
+                let sigServerIps = Self.resolveIPs(hostname: signalingServerHost)
+                for ip in sigServerIps where !allIps.contains(ip) { allIps.append(ip) }
+            }
+
             let allPorts = ([mciPort, sdpPort]).filter { $0 > 0 }
             let pairs = allIps.flatMap { ip in allPorts.map { (ip, $0) } }
 
             if pairs.isEmpty {
                 print("[ICE] No server IPs or ports available — ICE candidate injection skipped")
             } else {
-                print("[ICE] Injecting \(pairs.count) candidate(s) (mciIp=\(mciIp ?? "nil") mciPort=\(mciPort) sdpPort=\(sdpPort))")
+                print("[ICE] Injecting \(pairs.count * 4) candidate(s) (mciIp=\(mciIp ?? "nil") mciPort=\(mciPort) sdpPort=\(sdpPort))")
                 for (i, (ip, port)) in pairs.enumerated() {
-                    let cand = LKRTCIceCandidate(
-                        sdp: "candidate:\(i + 1) 1 UDP 2130706431 \(ip) \(port) typ host",
-                        sdpMLineIndex: 0, sdpMid: "0")
-                    try? await pc.add(cand)
+                    for mLineIndex in 0..<4 {
+                        let cand = LKRTCIceCandidate(
+                            sdp: "candidate:\(i + 1) 1 udp 2130706431 \(ip) \(port) typ host",
+                            sdpMLineIndex: Int32(mLineIndex), sdpMid: "\(mLineIndex)")
+                        try? await pc.add(cand)
+                    }
                     print("[ICE]   → \(ip):\(port)")
                 }
             }
@@ -553,9 +565,6 @@ final class GFNStreamController: NSObject {
         pc.add(track, streamIds: ["mic"])
     }
 
-    /// Extracts a dotted-decimal IP from a hostname that encodes it as dashes,
-    /// e.g. "10-1-2-3.zone.nvidiagrid.net" → "10.1.2.3".
-    /// Returns nil if the host is already a plain IP or doesn't match the pattern.
     private static func extractIpFromHost(_ host: String) -> String? {
         // Already a plain dotted-decimal IP (e.g. "80.250.97.40")
         let dotParts = host.components(separatedBy: ".")
@@ -567,6 +576,27 @@ final class GFNStreamController: NSObject {
         let dashParts = label.components(separatedBy: "-")
         guard dashParts.count == 4, dashParts.allSatisfy({ Int($0) != nil }) else { return nil }
         return dashParts.joined(separator: ".")
+    }
+
+    private static func resolveIPs(hostname: String) -> [String] {
+        var hints = addrinfo()
+        hints.ai_family = AF_UNSPEC
+        hints.ai_socktype = SOCK_STREAM
+        var res: UnsafeMutablePointer<addrinfo>? = nil
+        guard getaddrinfo(hostname, nil, &hints, &res) == 0 else { return [] }
+        defer { freeaddrinfo(res) }
+        var ips: [String] = []
+        var cur = res
+        while let info = cur {
+            var buf = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            if getnameinfo(info.pointee.ai_addr, info.pointee.ai_addrlen,
+                           &buf, socklen_t(NI_MAXHOST), nil, 0, NI_NUMERICHOST) == 0 {
+                let ip = String(cString: buf)
+                if !ips.contains(ip) { ips.append(ip) }
+            }
+            cur = info.pointee.ai_next
+        }
+        return ips
     }
 
     private func addRemoteICE(candidate: String, sdpMid: String?, sdpMLineIndex: Int?) {
