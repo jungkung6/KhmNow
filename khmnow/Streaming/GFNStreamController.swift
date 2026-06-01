@@ -400,14 +400,18 @@ final class GFNStreamController: NSObject {
             let allPorts = ([mciPort, sdpPort]).filter { $0 > 0 }
             let pairs = allIps.flatMap { ip in allPorts.map { (ip, $0) } }
 
+            // Extract remote ICE ufrag from the server's offer SDP
+            let (serverUfrag, _, _) = Self.extractIceCredentials(from: sdp)
+
             if pairs.isEmpty {
                 print("[ICE] No server IPs or ports available — ICE candidate injection skipped")
             } else {
                 print("[ICE] Injecting \(pairs.count * 4) candidate(s) (mciIp=\(mciIp ?? "nil") mciPort=\(mciPort) sdpPort=\(sdpPort))")
                 for (i, (ip, port)) in pairs.enumerated() {
                     for mLineIndex in 0..<4 {
+                        let candidateString = "candidate:\(i + 1) 1 udp 2130706431 \(ip) \(port) typ host" + (serverUfrag.isEmpty ? "" : " ufrag \(serverUfrag)")
                         let cand = LKRTCIceCandidate(
-                            sdp: "candidate:\(i + 1) 1 udp 2130706431 \(ip) \(port) typ host",
+                            sdp: candidateString,
                             sdpMLineIndex: Int32(mLineIndex), sdpMid: "\(mLineIndex)")
                         try? await pc.add(cand)
                     }

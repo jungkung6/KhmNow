@@ -564,14 +564,22 @@ struct StreamView: View {
                 )
                 createdSession = sessionInfo
 
-                // Poll until ready, but only need a single status 2/3 (server media is up).
+                // Poll until ready, requiring 2 consecutive ready polls (status 2/3) to ensure server media is fully up.
                 let timeout: TimeInterval = 60
                 let start = Date()
-                while sessionInfo.status != 2 && sessionInfo.status != 3 {
+                var readyStreak = 0
+                while readyStreak < 2 {
                     if Date().timeIntervalSince(start) > timeout {
                         loadingPhase = .timedOut
                         return
                     }
+                    if sessionInfo.status == 2 || sessionInfo.status == 3 {
+                        readyStreak += 1
+                    } else {
+                        readyStreak = 0
+                    }
+                    if readyStreak >= 2 { break }
+
                     try await Task.sleep(for: .seconds(2))
                     sessionInfo = try await cloudMatchClient.pollSession(
                         sessionId: sessionInfo.sessionId,

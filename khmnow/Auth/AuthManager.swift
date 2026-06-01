@@ -122,6 +122,7 @@ final class AuthManager {
             } catch is CancellationError {
                 loginPhase = .idle
             } catch {
+                print("[AuthManager] Login failed with error: \(error)")
                 loginPhase = .failed(error.localizedDescription)
             }
         }

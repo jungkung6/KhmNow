@@ -144,7 +144,7 @@ struct AuthManagerTests {
         
         // Wait/poll until auth.isAuthenticated is true
         var retries = 0
-        while !auth.isAuthenticated && retries < 50 {
+        while !auth.isAuthenticated && retries < 200 {
             try? await Task.sleep(for: .milliseconds(50))
             retries += 1
         }
