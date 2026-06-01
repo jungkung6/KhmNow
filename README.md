@@ -22,7 +22,13 @@ KhmNow is a tvOS client for GeForce NOW Thailand, featuring code and design patt
 
 ## Requirements
 
-* **Hardware:** Apple TV 4K (2nd generation or later recommended) or Apple TV HD.
+* **Software & Tools:**
+  - Mac running macOS Sequoia 15+ (or compatible version)
+  - **Xcode 26.5+**
+  - Apple Developer Account (free personal tier is sufficient)
+* **Hardware & OS:**
+  - Apple TV 4K (2nd generation or later recommended) or Apple TV HD.
+  - **tvOS 26.5+** (Note: This project is **tested and verified only on tvOS 26.5**).
 * **GeForce NOW Account:** An active account with GeForce NOW Thailand (operated by Pentavalent).
 * **Game Controller:** An MFi-certified gamepad, Xbox Series X/S, or PlayStation DualSense controller.
 
@@ -39,7 +45,7 @@ cd KhmNow
 ```
 
 ### Step 2: Add the WebRTC Package Dependency
-1. Open `khmnow.xcodeproj` in Xcode 16+.
+1. Open `khmnow.xcodeproj` in Xcode 26.5+.
 2. Go to **File** → **Add Package Dependencies...**.
 3. Paste the WebRTC library URL: `https://github.com/livekit/webrtc-xcframework`
 4. Select the target **WebRTC** and click Add Package.
