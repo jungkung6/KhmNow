@@ -244,7 +244,10 @@ private nonisolated func resolveSignalingUrl(serverIp: String, resourcePath: Str
         let urlPort = parts.count > 1 ? parts[1] : "\(defaultPort)"
         
         let finalHost: String
-        if serverIp.isEmpty {
+        if urlHost.contains(".") && !urlHost.hasPrefix(".") {
+            // Already a fully-qualified domain name, use it directly.
+            finalHost = urlHost
+        } else if serverIp.isEmpty {
             finalHost = urlHost.hasPrefix(".") ? String(urlHost.dropFirst()) : urlHost
         } else {
             if urlHost.hasPrefix(".") {

@@ -181,9 +181,10 @@ class GamesViewModel {
         guard let token = try? await authManager.resolveToken() else { return }
         let streamingUrl = authManager.session?.provider.streamingServiceUrl ?? NVIDIAAuth.defaultStreamingUrl
         let base = streamingUrl.hasSuffix("/") ? String(streamingUrl.dropLast()) : streamingUrl
+        let effectiveBase = session.serverIp.map { "https://\($0)" } ?? base
         
         do {
-            try await cloudMatchClient.stopSession(sessionId: session.sessionId, token: token, base: base)
+            try await cloudMatchClient.stopSession(sessionId: session.sessionId, token: token, base: effectiveBase)
             if resumableSession?.session.sessionId == session.sessionId {
                 resumableSession = nil
             }

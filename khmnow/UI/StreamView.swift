@@ -645,7 +645,8 @@ struct StreamView: View {
                     // Stale server session is blocking creation — stop all active sessions and retry once.
                     let staleSessions = (try? await cloudMatchClient.getActiveSessions(token: token, base: base)) ?? []
                     for stale in staleSessions {
-                        try? await cloudMatchClient.stopSession(sessionId: stale.sessionId, token: token, base: base)
+                        let staleBase = stale.serverIp.map { "https://\($0)" } ?? base
+                        try? await cloudMatchClient.stopSession(sessionId: stale.sessionId, token: token, base: staleBase)
                     }
                     sessionInfo = try await cloudMatchClient.createSession(request)
                 }

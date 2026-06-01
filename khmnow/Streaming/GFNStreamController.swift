@@ -231,7 +231,7 @@ final class GFNStreamController: NSObject {
                 try AVAudioSession.sharedInstance().setCategory(
                     .playback,
                     mode: .moviePlayback,
-                    options: [.allowBluetoothA2DP]
+                    options: []
                 )
             }
             try AVAudioSession.sharedInstance().setActive(true)
