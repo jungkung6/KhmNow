@@ -5,6 +5,9 @@ KhmNow is a tvOS client for GeForce NOW Thailand, featuring code and design patt
 > [!IMPORTANT]
 > **Independent Community Project:** This project is entirely independent and is **NOT** sponsored, affiliated, or endorsed by NVIDIA, Pentavalent (the GeForce NOW operator in Thailand), or any other commercial entity. It is provided for personal, non-commercial use only.
 
+> [!WARNING]
+> **Active Development:** KhmNow is under active development. Expect bugs and potential issues. Pull requests and bug reports are highly welcome!
+
 ---
 
 ## Features
