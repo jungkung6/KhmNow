@@ -1,9 +1,11 @@
 import Testing
 import Foundation
+import LiveKitWebRTC
 @testable import KhmNow
 
 @Suite("Streaming and Input Tests", .serialized)
 struct StreamingTests {
+
 
     @Test func testSDPMungerPreferCodec() {
         let originalSDP = """
@@ -235,6 +237,83 @@ struct StreamingTests {
         client.sendICECandidate(candidate: "candidate...", sdpMid: "video", sdpMLineIndex: 0)
         client.requestKeyframe()
         client.disconnect()
+    }
+
+    @Test func testLKRTCIceCandidateFormats() async {
+        class DummyDelegate: NSObject, LKRTCPeerConnectionDelegate {
+            func peerConnectionShouldNegotiate(_ peerConnection: LKRTCPeerConnection) {}
+            func peerConnection(_ peerConnection: LKRTCPeerConnection, didChange stateChanged: LKRTCSignalingState) {}
+            func peerConnection(_ peerConnection: LKRTCPeerConnection, didAdd stream: LKRTCMediaStream) {}
+            func peerConnection(_ peerConnection: LKRTCPeerConnection, didRemove stream: LKRTCMediaStream) {}
+            func peerConnection(_ peerConnection: LKRTCPeerConnection, didChange newState: LKRTCIceConnectionState) {}
+            func peerConnection(_ peerConnection: LKRTCPeerConnection, didChange newState: LKRTCIceGatheringState) {}
+            func peerConnection(_ peerConnection: LKRTCPeerConnection, didGenerate candidate: LKRTCIceCandidate) {}
+            func peerConnection(_ peerConnection: LKRTCPeerConnection, didRemove candidates: [LKRTCIceCandidate]) {}
+            func peerConnection(_ peerConnection: LKRTCPeerConnection, didOpen dataChannel: LKRTCDataChannel) {}
+            func peerConnection(_ peerConnection: LKRTCPeerConnection, didAdd rtpReceiver: LKRTCRtpReceiver, streams mediaStreams: [LKRTCMediaStream]) {}
+        }
+        
+        let factory = LKRTCPeerConnectionFactory()
+        let config = LKRTCConfiguration()
+        let constraints = LKRTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
+        let delegate = DummyDelegate()
+        guard let pc = factory.peerConnection(with: config, constraints: constraints, delegate: delegate) else {
+            #expect(false, "Failed to create peer connection")
+            return
+        }
+
+        var sdp = """
+        v=0
+        o=- 4373647202393833435 2 IN IP4 127.0.0.1
+        s=-
+        t=0 0
+        a=ice-ufrag:1b42fd69
+        a=ice-pwd:e3134645-4c9e-4566-bed2-eb004d1fc01f
+        a=fingerprint:sha-256 BB:9D:44:FE:7F:AC:15:F3:A5:DC:B3:B4:C0:78:44:4E:75:35:13:69:E1:5E:44:3F:4E:7B:58:5B:60:55:A7:5A
+        a=setup:actpass
+        m=audio 9 UDP/TLS/RTP/SAVPF 111
+        c=IN IP4 127.0.0.1
+        a=rtpmap:111 opus/48000/2
+        a=rtcp-mux
+        a=mid:0
+        """
+        sdp = sdp.replacingOccurrences(of: "\r\n", with: "\n")
+        sdp = sdp.components(separatedBy: "\n").joined(separator: "\r\n") + "\r\n"
+        let remoteSDP = LKRTCSessionDescription(type: .offer, sdp: sdp)
+        do {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                pc.setRemoteDescription(remoteSDP) { error in
+                    if let error { cont.resume(throwing: error) } else { cont.resume() }
+                }
+            }
+        } catch {
+            #expect(false, "setRemoteDescription failed: \(error)")
+            return
+        }
+
+        // Test with ufrag
+        let cand1 = LKRTCIceCandidate(
+            sdp: "candidate:1 1 udp 2130706431 161.248.11.134 48322 typ host ufrag 1b42fd69",
+            sdpMLineIndex: 0, sdpMid: "0")
+        
+        do {
+            try await pc.add(cand1)
+            print("--- TEST INFO: Successfully added candidate WITH ufrag ---")
+        } catch {
+            print("--- TEST INFO: FAILED to add candidate WITH ufrag: \(error) ---")
+        }
+
+        // Test without ufrag
+        let cand2 = LKRTCIceCandidate(
+            sdp: "candidate:2 1 udp 2130706431 161.248.11.134 48322 typ host",
+            sdpMLineIndex: 0, sdpMid: "0")
+        
+        do {
+            try await pc.add(cand2)
+            print("--- TEST INFO: Successfully added candidate WITHOUT ufrag ---")
+        } catch {
+            print("--- TEST INFO: FAILED to add candidate WITHOUT ufrag: \(error) ---")
+        }
     }
 }
 

@@ -309,9 +309,40 @@ final class GFNStreamController: NSObject {
         } else {
             print("[Stream] Warning: no server IP available — offer c= lines left as 0.0.0.0")
         }
+        let mciPort = session.mediaConnectionInfo?.port ?? 0
+        let sdpPort = sdp.components(separatedBy: "\r\n").compactMap { line -> Int? in
+            guard line.hasPrefix("m=") else { return nil }
+            let p = line.components(separatedBy: " ")
+            guard p.count >= 2, let port = Int(p[1]), port > 9 else { return nil }
+            return port
+        }.first ?? 0
+
+        var offerSdpToUse = fixedSdp
+        if mciPort > 0 && sdpPort > 0 && mciPort != sdpPort {
+            print("[Stream] Rewriting offer SDP media ports: \(sdpPort) → \(mciPort)")
+            let lines = fixedSdp.components(separatedBy: "\r\n")
+            let rewrittenLines = lines.map { line -> String in
+                if line.hasPrefix("m=") {
+                    var parts = line.components(separatedBy: " ")
+                    if parts.count >= 2 {
+                        parts[1] = String(mciPort)
+                        return parts.joined(separator: " ")
+                    }
+                } else if line.hasPrefix("a=rtcp:") {
+                    var parts = line.components(separatedBy: " ")
+                    if parts.count >= 2 {
+                        parts[0] = "a=rtcp:\(mciPort)"
+                        return parts.joined(separator: " ")
+                    }
+                }
+                return line
+            }
+            offerSdpToUse = rewrittenLines.joined(separator: "\r\n")
+        }
+
         // Normalize H.265 fmtp in the offer before setRemoteDescription so WebRTC
         // keeps H.265 in the generated answer (tier-flag and level-id must be valid).
-        let h265NormalizedSdp = SDPMunger.rewriteH265LevelId(SDPMunger.rewriteH265TierFlag(fixedSdp))
+        let h265NormalizedSdp = SDPMunger.rewriteH265LevelId(SDPMunger.rewriteH265TierFlag(offerSdpToUse))
         let remoteSDP = LKRTCSessionDescription(type: .offer, sdp: h265NormalizedSdp)
         do {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
@@ -413,7 +444,12 @@ final class GFNStreamController: NSObject {
                         let cand = LKRTCIceCandidate(
                             sdp: candidateString,
                             sdpMLineIndex: Int32(mLineIndex), sdpMid: "\(mLineIndex)")
-                        try? await pc.add(cand)
+                        do {
+                            try await pc.add(cand)
+                            print("[ICE] Added remote candidate: \(candidateString) for mLine=\(mLineIndex)")
+                        } catch {
+                            print("[ICE] Failed to add remote candidate: \(error) for cand=\(candidateString)")
+                        }
                     }
                     print("[ICE]   → \(ip):\(port)")
                 }

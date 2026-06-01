@@ -140,85 +140,105 @@ private nonisolated struct GetSessionsResponse: Decodable {
 
 // MARK: - Session Request Body
 
-private nonisolated func buildSessionRequestBody(_ input: SessionCreateRequest) -> [String: Any] {
-    let resolutionParts = input.settings.resolution.split(separator: "x")
+private nonisolated func buildSessionRequestData(
+    appId: String,
+    internalTitle: String?,
+    settings: StreamSettings,
+    deviceHashId: String,
+    accountLinked: Bool
+) -> [String: Any] {
+    let resolutionParts = settings.resolution.split(separator: "x")
     let width = Int(resolutionParts.first ?? "1920") ?? 1920
     let height = Int(resolutionParts.last ?? "1080") ?? 1080
     let tzOffset = -TimeZone.current.secondsFromGMT() * 1000
-    let isHdr = input.settings.colorQuality == .hdr10bit
+    let isHdr = settings.colorQuality == .hdr10bit
 
     return [
-        "sessionRequestData": [
-            "appId": input.appId,
-            "internalTitle": input.internalTitle as Any,
-            "availableSupportedControllers": [],
-            "networkTestSessionId": NSNull(),
-            "parentSessionId": NSNull(),
-            "clientIdentification": "GFN-PC",
-            "deviceHashId": UUID().uuidString,
-            "clientVersion": "30.0",
-            "sdkVersion": "1.0",
-            "streamerVersion": 1,
-            "clientPlatformName": "mac",
-            "clientRequestMonitorSettings": [[
-                "widthInPixels": width,
-                "heightInPixels": height,
-                "framesPerSecond": input.settings.fps,
-                "sdrHdrMode": isHdr ? 1 : 0,
-                "displayData": [
-                    "desiredContentMaxLuminance": isHdr ? 1000 : 0,
-                    "desiredContentMinLuminance": 0,
-                    "desiredContentMaxFrameAverageLuminance": isHdr ? 500 : 0,
-                ],
-                "dpi": 100,
-            ]],
-            "useOps": true,
-            "audioMode": 2,
-            "metaData": [
-                ["key": "SubSessionId", "value": UUID().uuidString],
-                ["key": "wssignaling", "value": "1"],
-                ["key": "GSStreamerType", "value": "WebRTC"],
-                ["key": "networkType", "value": "Unknown"],
-                ["key": "ClientImeSupport", "value": "0"],
-                ["key": "clientPhysicalResolution", "value": "{\"horizontalPixels\":\(width),\"verticalPixels\":\(height)}"],
-                ["key": "surroundAudioInfo", "value": "2"],
-            ],
+        "appId": appId,
+        "internalTitle": (internalTitle ?? "") as Any,
+        "availableSupportedControllers": [] as [Any],
+        "networkTestSessionId": NSNull(),
+        "parentSessionId": NSNull(),
+        "clientIdentification": "GFN-PC",
+        "deviceHashId": deviceHashId,
+        "clientVersion": "30.0",
+        "sdkVersion": "1.0",
+        "streamerVersion": 1,
+        "clientPlatformName": "mac",
+        "clientRequestMonitorSettings": [[
+            "widthInPixels": width,
+            "heightInPixels": height,
+            "framesPerSecond": settings.fps,
             "sdrHdrMode": isHdr ? 1 : 0,
-            "clientDisplayHdrCapabilities": isHdr ? [
-                "version": 1,
-                "hdrEdrSupportedFlagsInUint32": 1,
-                "staticMetadataDescriptorId": 0,
-            ] : NSNull(),
-            "surroundAudioInfo": 0,
-            "remoteControllersBitmap": 0,
-            "clientTimezoneOffset": tzOffset,
-            "enhancedStreamMode": 1,
-            "appLaunchMode": 1,
-            "secureRTSPSupported": false,
-            "partnerCustomData": "",
-            "accountLinked": input.accountLinked,
-            "enablePersistingInGameSettings": true,
-            "userAge": 26,
-            "requestedStreamingFeatures": [
-                "reflex": input.settings.fps >= 120,
-                "bitDepth": input.settings.colorQuality.bitDepth,
-                "cloudGsync": false,
-                "enabledL4S": input.settings.enableL4S,
-                "mouseMovementFlags": 0,
-                "trueHdr": isHdr,
-                "supportedHidDevices": 0,
-                "profile": 0,
-                "fallbackToLogicalResolution": false,
-                "hidDevices": NSNull(),
-                "chromaFormat": input.settings.colorQuality.chromaFormat,
-                "prefilterMode": 0,
-                "prefilterSharpness": 0,
-                "prefilterNoiseReduction": 0,
-                "hudStreamingMode": 0,
-                "sdrColorSpace": 2,
-                "hdrColorSpace": isHdr ? 4 : 0,
-            ],
+            "displayData": isHdr ? [
+                "desiredContentMaxLuminance": 1000,
+                "desiredContentMinLuminance": 0,
+                "desiredContentMaxFrameAverageLuminance": 500,
+            ] : [
+                "desiredContentMaxLuminance": 0,
+                "desiredContentMinLuminance": 0,
+                "desiredContentMaxFrameAverageLuminance": 0,
+            ] as [String: Any],
+            "dpi": 100,
+        ]],
+        "useOps": true,
+        "audioMode": 2,
+        "metaData": [
+            ["key": "SubSessionId", "value": UUID().uuidString],
+            ["key": "wssignaling", "value": "1"],
+            ["key": "GSStreamerType", "value": "WebRTC"],
+            ["key": "networkType", "value": "Unknown"],
+            ["key": "ClientImeSupport", "value": "0"],
+            ["key": "clientPhysicalResolution", "value": "{\"horizontalPixels\":\(width),\"verticalPixels\":\(height)}"],
+            ["key": "surroundAudioInfo", "value": "2"],
         ],
+        "sdrHdrMode": isHdr ? 1 : 0,
+        "clientDisplayHdrCapabilities": isHdr ? [
+            "version": 1,
+            "hdrEdrSupportedFlagsInUint32": 1,
+            "staticMetadataDescriptorId": 0,
+        ] : NSNull(),
+        "surroundAudioInfo": 0,
+        "remoteControllersBitmap": 0,
+        "clientTimezoneOffset": tzOffset,
+        "enhancedStreamMode": 1,
+        "appLaunchMode": 1,
+        "secureRTSPSupported": false,
+        "partnerCustomData": "",
+        "accountLinked": accountLinked,
+        "enablePersistingInGameSettings": true,
+        "userAge": 26,
+        "requestedStreamingFeatures": [
+            "reflex": settings.fps >= 120,
+            "bitDepth": settings.colorQuality.bitDepth,
+            "cloudGsync": false,
+            "enabledL4S": settings.enableL4S,
+            "mouseMovementFlags": 0,
+            "trueHdr": isHdr,
+            "supportedHidDevices": 0,
+            "profile": 0,
+            "fallbackToLogicalResolution": false,
+            "hidDevices": NSNull(),
+            "chromaFormat": settings.colorQuality.chromaFormat,
+            "prefilterMode": 0,
+            "prefilterSharpness": 0,
+            "prefilterNoiseReduction": 0,
+            "hudStreamingMode": 0,
+            "sdrColorSpace": 2,
+            "hdrColorSpace": isHdr ? 4 : 0,
+        ],
+    ]
+}
+
+private nonisolated func buildSessionRequestBody(_ input: SessionCreateRequest, deviceHashId: String) -> [String: Any] {
+    return [
+        "sessionRequestData": buildSessionRequestData(
+            appId: input.appId,
+            internalTitle: input.internalTitle,
+            settings: input.settings,
+            deviceHashId: deviceHashId,
+            accountLinked: input.accountLinked
+        )
     ]
 }
 
@@ -284,6 +304,33 @@ private nonisolated func resolveSignalingUrl(serverIp: String, resourcePath: Str
 final class CloudMatchClient {
     private let urlSession: URLSession
 
+    static nonisolated var persistentClientId: String {
+        if let saved = UserDefaults.standard.string(forKey: "gfn.persistentClientId") {
+            return saved
+        }
+        let newId = UUID().uuidString.uppercased()
+        UserDefaults.standard.set(newId, forKey: "gfn.persistentClientId")
+        return newId
+    }
+
+    static nonisolated var persistentDeviceId: String {
+        if let saved = UserDefaults.standard.string(forKey: "gfn.persistentDeviceId") {
+            return saved
+        }
+        let newId = UUID().uuidString.uppercased()
+        UserDefaults.standard.set(newId, forKey: "gfn.persistentDeviceId")
+        return newId
+    }
+
+    static nonisolated var persistentDeviceHashId: String {
+        if let saved = UserDefaults.standard.string(forKey: "gfn.persistentDeviceHashId") {
+            return saved
+        }
+        let newId = UUID().uuidString.uppercased()
+        UserDefaults.standard.set(newId, forKey: "gfn.persistentDeviceHashId")
+        return newId
+    }
+
     init(urlSession: URLSession = .gfnShared) {
         self.urlSession = urlSession
     }
@@ -291,8 +338,8 @@ final class CloudMatchClient {
     // MARK: Create Session
 
     func createSession(_ input: SessionCreateRequest) async throws -> SessionInfo {
-        let clientId = UUID().uuidString
-        let deviceId = UUID().uuidString
+        let clientId = Self.persistentClientId
+        let deviceId = Self.persistentDeviceId
         let base = input.streamingBaseUrl.map {
             $0.hasSuffix("/") ? String($0.dropLast()) : $0
         } ?? "https://prod.cloudmatchbeta.nvidiagrid.net"
@@ -303,7 +350,7 @@ final class CloudMatchClient {
                 URLQueryItem(name: "languageCode", value: input.settings.gameLanguage),
             ])
 
-        let body = buildSessionRequestBody(input)
+        let body = buildSessionRequestBody(input, deviceHashId: Self.persistentDeviceHashId)
         var request = URLRequest(url: params)
         request.httpMethod = "POST"
         for (k, v) in gfnHeaders(token: input.token, clientId: clientId, deviceId: deviceId, includeOrigin: true) {
@@ -360,8 +407,8 @@ final class CloudMatchClient {
         let url = URL(string: "\(base)/v2/session/\(sessionId)")!
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
-        let cid = clientId ?? UUID().uuidString
-        let did = deviceId ?? UUID().uuidString
+        let cid = clientId ?? Self.persistentClientId
+        let did = deviceId ?? Self.persistentDeviceId
         for (k, v) in gfnHeaders(token: token, clientId: cid, deviceId: did, includeOrigin: true) {
             request.setValue(v, forHTTPHeaderField: k)
         }
@@ -408,8 +455,8 @@ final class CloudMatchClient {
         appId: String?,
         settings: StreamSettings
     ) async throws -> SessionInfo {
-        let clientId = UUID().uuidString
-        let deviceId = UUID().uuidString
+        let clientId = Self.persistentClientId
+        let deviceId = Self.persistentDeviceId
         let effectiveBase = "https://\(serverIp)"
 
         // Pre-flight: get current session state
@@ -433,53 +480,20 @@ final class CloudMatchClient {
         ]
         guard let url = comps.url else { throw CloudMatchError.sessionCreateFailed("Invalid resume URL") }
 
-        let resolutionParts = settings.resolution.split(separator: "x")
-        let width = Int(resolutionParts.first ?? "1920") ?? 1920
-        let height = Int(resolutionParts.last ?? "1080") ?? 1080
-        let tzOffset = -TimeZone.current.secondsFromGMT() * 1000
-        let isHdr = settings.colorQuality == .hdr10bit
-
-        let sessionRequestData: [String: Any] = [
-            "appId": appId ?? "",
-            "clientIdentification": "GFN-PC",
-            "clientVersion": "30.0",
-            "sdkVersion": "1.0",
-            "streamerVersion": 1,
-            "clientPlatformName": "mac",
-            "clientRequestMonitorSettings": [[
-                "widthInPixels": width,
-                "heightInPixels": height,
-                "framesPerSecond": settings.fps,
-                "sdrHdrMode": isHdr ? 1 : 0,
-                "displayData": [
-                    "desiredContentMaxLuminance": isHdr ? 1000 : 0,
-                    "desiredContentMinLuminance": 0,
-                    "desiredContentMaxFrameAverageLuminance": isHdr ? 500 : 0,
-                ],
-                "dpi": 100,
-            ]],
-            "sdrHdrMode": isHdr ? 1 : 0,
-            "surroundAudioInfo": 0,
-            "clientTimezoneOffset": tzOffset,
-            "enhancedStreamMode": 1,
-            "appLaunchMode": 1,
-            "secureRTSPSupported": false,
-            "metaData": [
-                ["key": "SubSessionId", "value": UUID().uuidString],
-                ["key": "wssignaling", "value": "1"],
-                ["key": "GSStreamerType", "value": "WebRTC"],
-                ["key": "networkType", "value": "Unknown"],
-                ["key": "ClientImeSupport", "value": "0"],
-                ["key": "clientPhysicalResolution", "value": "{\"horizontalPixels\":\(width),\"verticalPixels\":\(height)}"],
-                ["key": "surroundAudioInfo", "value": "2"],
-            ]
-        ]
+        let requestData = buildSessionRequestData(
+            appId: appId ?? "",
+            internalTitle: nil,
+            settings: settings,
+            deviceHashId: Self.persistentDeviceHashId,
+            accountLinked: true
+        )
 
         let body: [String: Any] = [
             "action": 2,
             "data": "RESUME",
-            "sessionRequestData": sessionRequestData,
+            "sessionRequestData": requestData,
         ]
+
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         for (k, v) in gfnHeaders(token: token, clientId: clientId, deviceId: deviceId, includeOrigin: true) {

@@ -30,6 +30,7 @@ struct StreamView: View {
     @State private var showKeyboardInput = false
     // Per-ad state tracking to avoid duplicate reports
     @State private var adReportedAction: [String: AdAction] = [:]
+    @State private var connectionAttempts = 0
 
     private let cloudMatchClient = CloudMatchClient()
 
@@ -248,9 +249,12 @@ struct StreamView: View {
 
                     HStack(spacing: 24) {
                         if case .timedOut = loadingPhase {
-                            Button("Retry") { Task { await startSession() } }
-                                .buttonStyle(.bordered)
-                                .tint(.blue)
+                            Button("Retry") {
+                                connectionAttempts = 0
+                                Task { await startSession() }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.blue)
                         }
                         Button("Cancel") { disconnect() }
                             .buttonStyle(.bordered)
@@ -525,9 +529,12 @@ struct StreamView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             HStack(spacing: 24) {
-                Button("Retry") { Task { await startSession() } }
-                    .buttonStyle(.bordered)
-                    .tint(.blue)
+                Button("Retry") {
+                    connectionAttempts = 0
+                    Task { await startSession() }
+                }
+                .buttonStyle(.bordered)
+                .tint(.blue)
                 Button("Exit") { disconnect() }
                     .buttonStyle(.bordered)
                     .tint(.red)
@@ -540,6 +547,14 @@ struct StreamView: View {
     // MARK: Actions
 
     private func startSession() async {
+        // Prevent automatic reconnection if we already tried and failed/disconnected.
+        // The user must click the "Retry" button manually to reset this counter.
+        if connectionAttempts > 0 {
+            print("[StreamView] Suppressing automatic connection attempt (already tried \(connectionAttempts) time(s))")
+            return
+        }
+        connectionAttempts += 1
+
         // Reset stream controller (handles retry from failed/disconnected state)
         streamController.disconnect()
 
