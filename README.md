@@ -49,15 +49,26 @@ cd KhmNow
 2. Xcode will automatically detect and resolve the **WebRTC** package dependency (from `https://github.com/livekit/webrtc-xcframework`) defined in the project.
 3. Wait for Xcode to finish downloading the WebRTC package (you can track progress in the top status bar). If Xcode fails to resolve it automatically, you can add it manually via **File** → **Add Package Dependencies...** by pasting the URL.
 
-### Step 3: Configure Signing & Team
-1. In Xcode, select the **khmnow** project at the top of the left navigator pane.
-2. Select the **khmnow** target under Targets.
-3. Go to the **Signing & Capabilities** tab.
-4. Check **Automatically manage signing**.
-5. Under **Team**, select your Apple Developer Team account (personal/free accounts work perfectly).
-6. If Xcode displays a bundle identifier conflict error, modify the **Bundle Identifier** field to a unique value (e.g., `com.yourname.khmnow`).
+### Step 3: Set your Development Team (Local Config)
+1. Copy the local configuration template:
+   ```bash
+   cp Local.xcconfig.example Local.xcconfig
+   ```
+2. Open `Local.xcconfig` in a text editor and replace `YOUR_TEAM_ID_HERE` with your Apple Developer Team ID (found at [developer.apple.com](https://developer.apple.com) → Account → Membership).
+3. Attach it to the project in Xcode:
+   - Select the **khmnow** project at the top of the left navigator pane.
+   - Select the **Info** tab.
+   - Expand the **Configurations** section.
+   - Expand both **Debug** and **Release**.
+   - Under the **khmnow** target row, set **Based on Configuration File** to `Local.xcconfig` for both configurations.
 
-### Step 4: Run & Deploy
+### Step 4: Configure Signing & Bundle ID
+1. Select the **khmnow** target under Targets, then go to the **Signing & Capabilities** tab.
+2. Check **Automatically manage signing**.
+3. Ensure the **Team** dropdown matches your account.
+4. If Xcode displays a bundle identifier conflict error, modify the **Bundle Identifier** field to a unique value (e.g., `com.yourname.khmnow`).
+
+### Step 5: Run & Deploy
 1. Pair your Apple TV with Xcode over your network: **Xcode → Window → Devices and Simulators** → Pair Apple TV.
 2. Select your paired **Apple TV** as the run destination from the destination selector at the top of Xcode.
 3. Press **Cmd + R** (or click the Play button) to build, sign, and install the app.
