@@ -5,3 +5,7 @@ DerivedData/
 *.moved-aside
 *.xcuserstate
 xcuserdata/
+
+# Private configuration and tracking
+Local.xcconfig
+release-*.md
