@@ -28,63 +28,31 @@ KhmNow is a tvOS client for GeForce NOW Thailand, featuring code and design patt
 
 ---
 
-## Installation & Setup Guide
+### Installation & Setup Guide (Build from Source)
 
-Whether you are a casual user looking to install the app or a developer compiling from source, follow the respective guide below.
+Since tvOS apps compiled with free developer accounts expire every 7 days, you must build the project from source using Xcode to deploy it to your Apple TV.
 
-### Method 1: For Non-Developers (Sideloading using Sideloadly)
-
-Sideloadly is a free tool that lets you install apps (`.ipa` files) on Apple TV using a standard Mac or Windows PC.
-
-#### Step 1: Prep your Apple TV
-1. On your Apple TV, go to **Settings** → **System** → **Software Updates** and ensure you are on the latest tvOS version.
-2. Go to **Settings** → **General** → **Privacy & Security**. Scroll down and make sure **Developer Mode** is visible and **Enabled**. (If not visible, you must pair Xcode first or use Apple Configurator to enable it).
-3. Ensure your Apple TV and your computer are on the same local Wi-Fi or Ethernet network.
-
-#### Step 2: Download Sideloadly
-1. Download and install **Sideloadly** on your Mac or Windows PC from [sideloadly.io](https://sideloadly.io).
-
-#### Step 3: Compile/Obtain the `.ipa`
-1. You can build the `.ipa` from the source using Xcode (see power user instructions below) or download the pre-compiled version from the Releases page.
-
-#### Step 4: Sideload the App
-1. Open Sideloadly.
-2. Connect your Apple TV to your computer. On macOS, go to Xcode → Window → Devices and Simulators to make sure your Apple TV is paired. Once paired, Sideloadly will auto-detect it under **Device**.
-3. Under **Apple Account**, enter your Apple ID email address (your personal free developer account).
-4. Drag and drop the `KhmNow.ipa` file into Sideloadly.
-5. Click **Start**. Sideloadly will ask for your Apple ID password (this is sent securely to Apple to sign the app) and two-factor code.
-6. Once it says **Done**, the **KhmNow** app icon will appear on your Apple TV home screen!
-
-> [!NOTE]
-> Free Apple Developer accounts require apps to be re-signed every **7 days**. Sideloadly can automatically refresh the signature over Wi-Fi if your computer is on and connected to the same network.
-
----
-
-### Method 2: For Power Users / Developers (Build from Source)
-
-If you want to build the code yourself using Xcode:
-
-#### Step 1: Clone the Repository
+### Step 1: Clone the Repository
 ```bash
 git clone https://github.com/jungkung6/KhmNow.git
 cd KhmNow
 ```
 
-#### Step 2: Add the WebRTC Package Dependency
+### Step 2: Add the WebRTC Package Dependency
 1. Open `khmnow.xcodeproj` in Xcode 16+.
 2. Go to **File** → **Add Package Dependencies...**.
-3. Paste the URL: `https://github.com/livekit/webrtc-xcframework`
+3. Paste the WebRTC library URL: `https://github.com/livekit/webrtc-xcframework`
 4. Select the target **WebRTC** and click Add Package.
 
-#### Step 3: Configure Signing & Team
-1. In Xcode, click on the **khmnow** project at the top of the left navigator pane.
+### Step 3: Configure Signing & Team
+1. In Xcode, select the **khmnow** project at the top of the left navigator pane.
 2. Select the **khmnow** target under Targets.
 3. Go to the **Signing & Capabilities** tab.
 4. Check **Automatically manage signing**.
-5. Under **Team**, select your Apple Developer Team account (personal accounts work perfectly).
+5. Under **Team**, select your Apple Developer Team account (personal/free accounts work perfectly).
 6. If Xcode displays a bundle identifier conflict error, modify the **Bundle Identifier** field to a unique value (e.g., `com.yourname.khmnow`).
 
-#### Step 4: Run & Deploy
+### Step 4: Run & Deploy
 1. Pair your Apple TV with Xcode over your network: **Xcode → Window → Devices and Simulators** → Pair Apple TV.
 2. Select your paired **Apple TV** as the run destination from the destination selector at the top of Xcode.
 3. Press **Cmd + R** (or click the Play button) to build, sign, and install the app.
@@ -92,20 +60,40 @@ cd KhmNow
 
 ---
 
-## Directory Architecture
+## Project Structure & Architecture
 
 ```
 KhmNow/
 ├── khmnow/
-│   ├── Auth/           # OAuth 2.0 PKCE, token caching, and keychain storage
-│   ├── Session/        # GraphQL catalog fetching and GFN CloudMatch endpoints
-│   ├── Streaming/      # WebRTC PeerConnection, SDP munging, and XInput binary protocols
-│   ├── Video/          # AVSampleBufferDisplayLayer surface handlers
-│   ├── UI/             # HomeView dashboard, premium QueueProgress cards, and SettingsView
-│   └── Assets.xcassets # Parallax 3-layer app icons and brand assets
-├── khmnow.xcodeproj    # Xcode project structure
-├── khmnowTests/        # Test cases (Core clients, input mappings, SDP parsing)
-└── khmnowUITests/      # Integration and layout interface tests
+│   ├── Auth/
+│   │   ├── AuthManager.swift           # @Observable auth manager with Keychain token caching
+│   │   └── NVIDIAAuthAPI.swift         # OAuth 2.0 PKCE device authorization flow client
+│   ├── Session/
+│   │   ├── SessionState.swift          # Session states, stream presets, and GFN models
+│   │   ├── CloudMatchClient.swift      # Client for GFN CloudMatch APIs (create, poll, terminate)
+│   │   ├── GamesClient.swift           # GFN catalog client via GraphQL persisted queries
+│   │   ├── GFNURLSession.swift         # Custom SSL/TLS trust delegates for *.nvidiagrid.net
+│   │   └── ZoneClient.swift            # Gateway region mapping and queue depth monitor
+│   ├── Streaming/
+│   │   ├── GFNStreamController.swift   # WebRTC PeerConnection, SDP munging, and stream control
+│   │   ├── SDPMunger.swift             # Codec-aware WebRTC SDP offer/answer filter
+│   │   ├── SignalingClient.swift       # WebSocket client for GFN signaling / ICE exchange
+│   │   └── InputSender.swift           # GameController mappings to custom GFN XInput binary protocol
+│   ├── Video/
+│   │   └── VideoSurfaceView.swift      # AVSampleBufferDisplayLayer video surface wrapper
+│   ├── UI/
+│   │   ├── HomeView.swift              # Main dashboard with Continue Playing & Favorites rows
+│   │   ├── LibraryView.swift           # User's game catalog with search, sorting, and favorites
+│   │   ├── StoreView.swift             # Complete GFN catalog browser with search and details
+│   │   ├── SettingsView.swift          # Stream quality selectors and Network Performance Benchmark
+│   │   ├── MainTabView.swift           # Root tvOS sidebar/tab navigation shell
+│   │   ├── LoginView.swift             # OAuth login screen with QR code and PIN display
+│   │   ├── QueueAdPlayerView.swift     # AVPlayer wrapper for mandatory queue advertisements
+│   │   └── StreamView.swift            # Full-screen video player HUD stats and Queue Card
+│   └── Assets.xcassets                 # Premium tvOS 26 layered parallax App Icon stacks
+├── khmnow.xcodeproj                    # Xcode project configuration
+├── khmnowTests/                        # Core unit test suites for Auth, Clients, and Inputs
+└── khmnowUITests/                      # tvOS user interface interaction tests
 ```
 
 ---
