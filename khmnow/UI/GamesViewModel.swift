@@ -2,15 +2,16 @@ import Foundation
 import Observation
 import UIKit
 
-struct ResumableSession {
+struct ResumableSession: Codable, Equatable {
     let game: GameInfo
     let session: SessionInfo
-    let leftAt: Date
-    /// Grace window before we stop offering to resume (GFN keeps the session ~2 min).
-    static let gracePeriod: TimeInterval = 110
+    let leftAtServerTime: Date
+    let gracePeriod: TimeInterval
 
     var secondsRemaining: Int {
-        max(0, Int(Self.gracePeriod - Date().timeIntervalSince(leftAt)))
+        let offset = UserDefaults.standard.double(forKey: "gfn.serverTimeOffset")
+        let currentServerTime = Date().addingTimeInterval(offset)
+        return max(0, Int(gracePeriod - currentServerTime.timeIntervalSince(leftAtServerTime)))
     }
     var isExpired: Bool { secondsRemaining == 0 }
 }
@@ -51,6 +52,10 @@ class GamesViewModel {
         if let data = UserDefaults.standard.data(forKey: "gfn.streamSettings"),
            let settings = try? JSONDecoder().decode(StreamSettings.self, from: data) {
             self.streamSettings = settings
+        }
+        if let data = UserDefaults.standard.data(forKey: "gfn.resumableSession"),
+           let resumable = try? JSONDecoder().decode(ResumableSession.self, from: data) {
+            self.resumableSession = resumable
         }
         // tvOS currently caps at 60 Hz; clamp any saved value to the screen maximum.
         // If Apple raises the cap in a future tvOS release this will automatically unlock.
@@ -145,6 +150,9 @@ class GamesViewModel {
 
             // Non-fatal — may fail if no active sessions or server returns 404
             activeSessions = (try? await cloudMatchClient.getActiveSessions(token: token, base: base)) ?? []
+            if !activeSessions.isEmpty || resumableSession != nil {
+                await validateActiveSession(authManager: authManager)
+            }
 
             // Non-fatal — fetch subscription tier and entitled resolutions
             if let userId = authManager.session?.user.userId {
@@ -164,6 +172,9 @@ class GamesViewModel {
         let streamingUrl = authManager.session?.provider.streamingServiceUrl ?? NVIDIAAuth.defaultStreamingUrl
         let base = streamingUrl.hasSuffix("/") ? String(streamingUrl.dropLast()) : streamingUrl
         activeSessions = (try? await cloudMatchClient.getActiveSessions(token: token, base: base)) ?? []
+        if !activeSessions.isEmpty || resumableSession != nil {
+            await validateActiveSession(authManager: authManager)
+        }
     }
 
     func game(for session: ActiveSessionInfo) -> GameInfo? {
@@ -186,7 +197,7 @@ class GamesViewModel {
         do {
             try await cloudMatchClient.stopSession(sessionId: session.sessionId, token: token, base: effectiveBase)
             if resumableSession?.session.sessionId == session.sessionId {
-                resumableSession = nil
+                clearResumableSession()
             }
             await refreshActiveSessions(authManager: authManager)
         } catch {
@@ -255,5 +266,69 @@ class GamesViewModel {
     func saveSettings() {
         let data = try? JSONEncoder().encode(streamSettings)
         UserDefaults.standard.set(data, forKey: "gfn.streamSettings")
+    }
+
+    func saveResumableSession() {
+        if let data = try? JSONEncoder().encode(resumableSession) {
+            UserDefaults.standard.set(data, forKey: "gfn.resumableSession")
+        }
+    }
+
+    func clearResumableSession() {
+        resumableSession = nil
+        UserDefaults.standard.removeObject(forKey: "gfn.resumableSession")
+    }
+
+    func validateActiveSession(authManager: AuthManager) async {
+        guard let sessionId = resumableSession?.session.sessionId ?? activeSessions.first?.sessionId else {
+            return
+        }
+        guard let token = try? await authManager.resolveToken() else { return }
+        let streamingUrl = authManager.session?.provider.streamingServiceUrl ?? NVIDIAAuth.defaultStreamingUrl
+        let base = streamingUrl.hasSuffix("/") ? String(streamingUrl.dropLast()) : streamingUrl
+        
+        let serverIp = resumableSession?.session.serverIp ?? activeSessions.first?.serverIp
+        
+        print("[GamesViewModel] Validating session \(sessionId) with server base \(base)...")
+        do {
+            let (sessionInfo, serverDate) = try await cloudMatchClient.validateSession(
+                sessionId: sessionId,
+                token: token,
+                base: base,
+                serverIp: serverIp
+            )
+            
+            print("[GamesViewModel] Session \(sessionId) validation succeeded. Status: \(sessionInfo.status)")
+            if sessionInfo.status == 1 || sessionInfo.status == 2 || sessionInfo.status == 3 {
+                // If we don't have a local resumableSession, or the sessionId changed, create one
+                if resumableSession == nil || resumableSession?.session.sessionId != sessionInfo.sessionId {
+                    if let game = game(for: ActiveSessionInfo(sessionId: sessionInfo.sessionId, status: sessionInfo.status, appId: nil, serverIp: sessionInfo.serverIp, signalingUrl: sessionInfo.signalingUrl)) {
+                        // Use a default grace period of 120 seconds starting now (since we just discovered it)
+                        self.resumableSession = ResumableSession(
+                            game: game,
+                            session: sessionInfo,
+                            leftAtServerTime: serverDate,
+                            gracePeriod: 120
+                        )
+                        saveResumableSession()
+                    }
+                } else if let rs = resumableSession {
+                    // Update session info but preserve the original leftAtServerTime and gracePeriod
+                    self.resumableSession = ResumableSession(
+                        game: rs.game,
+                        session: sessionInfo,
+                        leftAtServerTime: rs.leftAtServerTime,
+                        gracePeriod: rs.gracePeriod
+                    )
+                    saveResumableSession()
+                }
+            } else {
+                print("[GamesViewModel] Session status \(sessionInfo.status) is not active. Clearing resumable.")
+                clearResumableSession()
+            }
+        } catch {
+            print("[GamesViewModel] Validation failed for session \(sessionId): \(error.localizedDescription). Clearing resumable.")
+            clearResumableSession()
+        }
     }
 }

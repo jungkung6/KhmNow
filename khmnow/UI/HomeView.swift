@@ -71,11 +71,16 @@ struct HomeView: View {
         }
         .task(id: viewModel.resumableSession?.session.sessionId) {
             guard viewModel.resumableSession != nil else { return }
+            var lastValidationTime = Date()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 tick &+= 1
+                if Date().timeIntervalSince(lastValidationTime) >= 10 {
+                    lastValidationTime = Date()
+                    await viewModel.validateActiveSession(authManager: authManager)
+                }
                 if viewModel.resumableSession?.isExpired == true {
-                    viewModel.resumableSession = nil
+                    viewModel.clearResumableSession()
                     return
                 }
             }

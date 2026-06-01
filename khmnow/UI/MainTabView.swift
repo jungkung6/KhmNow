@@ -75,11 +75,15 @@ struct MainTabView: View {
                     sessionToResume = nil
                 },
                 onLeave: { leftGame, session in
+                    let offset = UserDefaults.standard.double(forKey: "gfn.serverTimeOffset")
+                    let serverDate = Date().addingTimeInterval(offset)
                     viewModel.resumableSession = ResumableSession(
                         game: leftGame,
                         session: session,
-                        leftAt: Date()
+                        leftAtServerTime: serverDate,
+                        gracePeriod: 120
                     )
+                    viewModel.saveResumableSession()
                 }
             )
             .environment(authManager)

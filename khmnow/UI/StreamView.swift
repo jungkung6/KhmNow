@@ -738,7 +738,7 @@ struct StreamView: View {
 
     private func disconnect() {
         // Intentional end — clear any pending resumable session
-        viewModel.resumableSession = nil
+        viewModel.clearResumableSession()
         // Tell the server to stop the session so it doesn't linger
         if let session = createdSession, let token = sessionToken {
             Task {

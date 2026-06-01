@@ -38,6 +38,6 @@ func makeMockSession() -> URLSession {
 
 // MARK: - Mock Payloads Generators
 
-func makeHTTPResponse(url: URL, statusCode: Int = 200) -> HTTPURLResponse {
-    return HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: nil)!
+func makeHTTPResponse(url: URL, statusCode: Int = 200, headers: [String: String]? = nil) -> HTTPURLResponse {
+    return HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: headers)!
 }

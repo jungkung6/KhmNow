@@ -303,6 +303,25 @@ private nonisolated func resolveSignalingUrl(serverIp: String, resourcePath: Str
 @MainActor
 final class CloudMatchClient {
     private let urlSession: URLSession
+    private(set) var serverTimeOffset: TimeInterval = 0
+
+    private func updateServerTimeOffset(from response: URLResponse?) {
+        guard let httpResponse = response as? HTTPURLResponse,
+              let dateStr = httpResponse.value(forHTTPHeaderField: "Date") else {
+            return
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        formatter.timeZone = TimeZone(abbreviation: "GMT")
+        if let serverDate = formatter.date(from: dateStr) {
+            let clientDate = Date()
+            let offset = serverDate.timeIntervalSince(clientDate)
+            self.serverTimeOffset = offset
+            UserDefaults.standard.set(offset, forKey: "gfn.serverTimeOffset")
+            print("[CloudMatch] Synced clock with server. Server Date: \(serverDate), Client Date: \(clientDate), Offset: \(offset)s")
+        }
+    }
 
     static nonisolated var persistentClientId: String {
         if let saved = UserDefaults.standard.string(forKey: "gfn.persistentClientId") {
@@ -364,6 +383,7 @@ final class CloudMatchClient {
         }
 
         let (data, resp) = try await urlSession.data(for: request)
+        updateServerTimeOffset(from: resp)
         if let rawString = String(data: data, encoding: .utf8) {
             print("[CloudMatch] createSession Raw Response (HTTP \((resp as? HTTPURLResponse)?.statusCode ?? 0)):\n\(rawString)")
         }
@@ -394,6 +414,7 @@ final class CloudMatchClient {
         print("[CloudMatch] pollSession: GET \(url.absoluteString)")
         print("[CloudMatch] Request Headers: \(request.allHTTPHeaderFields ?? [:])")
         let (data, resp) = try await urlSession.data(for: request)
+        updateServerTimeOffset(from: resp)
         if let rawString = String(data: data, encoding: .utf8) {
             print("[CloudMatch] pollSession Raw Response (HTTP \((resp as? HTTPURLResponse)?.statusCode ?? 0)):\n\(rawString)")
         }
@@ -422,9 +443,10 @@ final class CloudMatchClient {
         var request = URLRequest(url: url)
         request.setValue("GFNJWT \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(NVIDIAAuth.userAgent, forHTTPHeaderField: "User-Agent")
-        let (data, _) = try await urlSession.data(for: request)
-        let resp = try JSONDecoder().decode(GetSessionsResponse.self, from: data)
-        return (resp.sessions ?? []).filter { $0.status == 1 || $0.status == 2 || $0.status == 3 }.map { entry in
+        let (data, resp) = try await urlSession.data(for: request)
+        updateServerTimeOffset(from: resp)
+        let responsePayload = try JSONDecoder().decode(GetSessionsResponse.self, from: data)
+        return (responsePayload.sessions ?? []).filter { $0.status == 1 || $0.status == 2 || $0.status == 3 }.map { entry in
             let appId = entry.sessionRequestData?.appId
             let sigConn = entry.connectionInfo?.first { $0.usage == 14 }
                        ?? entry.connectionInfo?.first
@@ -440,6 +462,42 @@ final class CloudMatchClient {
                 signalingUrl: signalingUrl
             )
         }
+    }
+
+    // MARK: Validate Session with server to get real-time availability and exact server date
+    func validateSession(
+        sessionId: String,
+        token: String,
+        base: String,
+        serverIp: String?
+    ) async throws -> (SessionInfo, Date) {
+        let effectiveBase = serverIp.map { "https://\($0)" } ?? base
+        let url = URL(string: "\(effectiveBase)/v2/session/\(sessionId)")!
+        var request = URLRequest(url: url)
+        let clientId = Self.persistentClientId
+        let deviceId = Self.persistentDeviceId
+        for (k, v) in gfnHeaders(token: token, clientId: clientId, deviceId: deviceId, includeOrigin: false) {
+            request.setValue(v, forHTTPHeaderField: k)
+        }
+        print("[CloudMatch] validateSession: GET \(url.absoluteString)")
+        print("[CloudMatch] Request Headers: \(request.allHTTPHeaderFields ?? [:])")
+        let (data, resp) = try await urlSession.data(for: request)
+        updateServerTimeOffset(from: resp)
+        
+        let statusCode = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if let rawString = String(data: data, encoding: .utf8) {
+            print("[CloudMatch] validateSession Raw Response (HTTP \(statusCode)):\n\(rawString)")
+        }
+        
+        guard statusCode == 200 else {
+            let msg = String(data: data, encoding: .utf8) ?? ""
+            throw CloudMatchError.sessionNotFound("Session not found on server (HTTP \(statusCode)): \(msg)")
+        }
+        
+        let payload = try JSONDecoder().decode(CloudMatchResponse.self, from: data)
+        let sessionInfo = try toSessionInfo(base: effectiveBase, payload: payload, rawData: data, clientId: clientId, deviceId: deviceId)
+        let serverDate = Date().addingTimeInterval(self.serverTimeOffset)
+        return (sessionInfo, serverDate)
     }
 
     // MARK: Claim / Resume Session
@@ -506,6 +564,7 @@ final class CloudMatchClient {
             print("[CloudMatch] Request Body:\n\(bodyString)")
         }
         let (data, resp) = try await urlSession.data(for: request)
+        updateServerTimeOffset(from: resp)
         let statusCode = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if let rawString = String(data: data, encoding: .utf8) {
             print("[CloudMatch] claimSession Raw Response (HTTP \(statusCode)):\n\(rawString)")
@@ -739,11 +798,13 @@ final class CloudMatchClient {
 enum CloudMatchError: Error, LocalizedError {
     case sessionCreateFailed(String)
     case missingServerIp
+    case sessionNotFound(String)
 
     var errorDescription: String? {
         switch self {
         case .sessionCreateFailed(let msg): return "Session creation failed: \(msg)"
         case .missingServerIp: return "CloudMatch response missing server IP."
+        case .sessionNotFound(let msg): return "Session not found: \(msg)"
         }
     }
 }

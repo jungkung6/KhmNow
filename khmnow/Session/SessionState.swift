@@ -101,7 +101,7 @@ nonisolated enum ColorQuality: String, Codable, CaseIterable {
 
 // MARK: - ICE Server
 
-nonisolated struct IceServer: Codable {
+nonisolated struct IceServer: Codable, Equatable {
     let urls: [String]
     let username: String?
     let credential: String?
@@ -140,7 +140,7 @@ nonisolated struct SessionAdState: Codable, Equatable {
 
 // MARK: - Session Info (returned by CloudMatch)
 
-nonisolated struct SessionInfo {
+nonisolated struct SessionInfo: Codable, Equatable {
     let sessionId: String
     let status: Int
     let zone: String
@@ -165,7 +165,7 @@ nonisolated struct SessionInfo {
     }
 }
 
-nonisolated struct MediaConnectionInfo {
+nonisolated struct MediaConnectionInfo: Codable, Equatable {
     let ip: String
     let port: Int
 }
@@ -200,7 +200,7 @@ nonisolated struct SubscriptionInfo {
 
 // MARK: - Games
 
-nonisolated struct GameInfo: Identifiable, Equatable {
+nonisolated struct GameInfo: Identifiable, Equatable, Codable {
     let id: String
     let title: String
     let boxArtUrl: String?
@@ -209,7 +209,7 @@ nonisolated struct GameInfo: Identifiable, Equatable {
     var variants: [GameVariant]
 }
 
-nonisolated struct GameVariant: Equatable {
+nonisolated struct GameVariant: Equatable, Codable {
     let id: String
     let appStore: String
     var appId: String?

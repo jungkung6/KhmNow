@@ -592,5 +592,111 @@ struct SessionClientTests {
         #expect(adState?.ads[0].mediaUrl == "https://video.com/ad.mp4")
         #expect(adState?.ads[0].adLengthInSeconds == 15.5)
     }
+
+    @Test func testCloudMatchClientValidateSessionSuccess() async throws {
+        let client = CloudMatchClient(urlSession: mockSession)
+        let serverTimeStr = "Tue, 02 Jun 2026 19:40:00 GMT"
+        
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let json = """
+            {
+                "session": {
+                    "sessionId": "validate-xyz",
+                    "status": 2
+                }
+            }
+            """
+            let headers = ["Date": serverTimeStr]
+            return (makeHTTPResponse(url: url, headers: headers), json.data(using: .utf8)!)
+        }
+
+        let (info, serverDate) = try await client.validateSession(
+            sessionId: "validate-xyz",
+            token: "mock-token",
+            base: "https://base.com",
+            serverIp: nil
+        )
+        
+        #expect(info.sessionId == "validate-xyz")
+        #expect(info.status == 2)
+        
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        formatter.timeZone = TimeZone(abbreviation: "GMT")
+        let expectedDate = formatter.date(from: serverTimeStr)!
+        #expect(abs(serverDate.timeIntervalSince(expectedDate)) < 1.0)
+        #expect(UserDefaults.standard.double(forKey: "gfn.serverTimeOffset") != 0.0)
+    }
+
+    @Test func testCloudMatchClientValidateSessionFailure() async throws {
+        let client = CloudMatchClient(urlSession: mockSession)
+        
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            return (makeHTTPResponse(url: url, statusCode: 404), Data())
+        }
+
+        do {
+            _ = try await client.validateSession(
+                sessionId: "validate-failed",
+                token: "mock-token",
+                base: "https://base.com",
+                serverIp: nil
+            )
+            Issue.record("Expected validation to fail with sessionNotFound, but it succeeded")
+        } catch CloudMatchError.sessionNotFound {
+            // Success
+        } catch {
+            Issue.record("Expected sessionNotFound error, got: \(error)")
+        }
+    }
+
+    @Test func testResumableSessionCodable() throws {
+        let game = GameInfo(
+            id: "game1",
+            title: "Game Title",
+            boxArtUrl: "http://box.jpg",
+            heroBannerUrl: "http://hero.jpg",
+            isInLibrary: true,
+            variants: [
+                GameVariant(id: "var1", appStore: "STEAM", appId: "123")
+            ]
+        )
+        
+        let session = SessionInfo(
+            sessionId: "sess123",
+            status: 2,
+            zone: "NP-AMS-08",
+            streamingBaseUrl: "https://streaming.com",
+            serverIp: "1.1.1.1",
+            signalingServer: "1.1.1.1:443",
+            signalingUrl: "wss://1.1.1.1:443/nvst/",
+            gpuType: "RTX 4080",
+            queuePosition: nil,
+            seatSetupStep: nil,
+            iceServers: [],
+            mediaConnectionInfo: MediaConnectionInfo(ip: "1.1.1.1", port: 48322),
+            clientId: "client-id-abc",
+            deviceId: "device-id-xyz",
+            adState: nil
+        )
+        
+        let resumable = ResumableSession(
+            game: game,
+            session: session,
+            leftAtServerTime: Date(),
+            gracePeriod: 120
+        )
+        
+        let encoded = try JSONEncoder().encode(resumable)
+        let decoded = try JSONDecoder().decode(ResumableSession.self, from: encoded)
+        
+        #expect(decoded.game.id == resumable.game.id)
+        #expect(decoded.session.sessionId == resumable.session.sessionId)
+        #expect(decoded.gracePeriod == resumable.gracePeriod)
+        #expect(abs(decoded.leftAtServerTime.timeIntervalSince(resumable.leftAtServerTime)) < 0.1)
+    }
 }
 
