@@ -398,6 +398,7 @@ final class CloudMatchClient {
         serverIp: String,
         token: String,
         base: String,
+        appId: String?,
         settings: StreamSettings
     ) async throws -> SessionInfo {
         let clientId = UUID().uuidString
@@ -424,10 +425,53 @@ final class CloudMatchClient {
             URLQueryItem(name: "languageCode", value: settings.gameLanguage),
         ]
         guard let url = comps.url else { throw CloudMatchError.sessionCreateFailed("Invalid resume URL") }
+
+        let resolutionParts = settings.resolution.split(separator: "x")
+        let width = Int(resolutionParts.first ?? "1920") ?? 1920
+        let height = Int(resolutionParts.last ?? "1080") ?? 1080
+        let tzOffset = -TimeZone.current.secondsFromGMT() * 1000
+        let isHdr = settings.colorQuality == .hdr10bit
+
+        let sessionRequestData: [String: Any] = [
+            "appId": appId ?? "",
+            "clientIdentification": "GFN-PC",
+            "clientVersion": "30.0",
+            "sdkVersion": "1.0",
+            "streamerVersion": 1,
+            "clientPlatformName": "mac",
+            "clientRequestMonitorSettings": [[
+                "widthInPixels": width,
+                "heightInPixels": height,
+                "framesPerSecond": settings.fps,
+                "sdrHdrMode": isHdr ? 1 : 0,
+                "displayData": [
+                    "desiredContentMaxLuminance": isHdr ? 1000 : 0,
+                    "desiredContentMinLuminance": 0,
+                    "desiredContentMaxFrameAverageLuminance": isHdr ? 500 : 0,
+                ],
+                "dpi": 100,
+            ]],
+            "sdrHdrMode": isHdr ? 1 : 0,
+            "surroundAudioInfo": 0,
+            "clientTimezoneOffset": tzOffset,
+            "enhancedStreamMode": 1,
+            "appLaunchMode": 1,
+            "secureRTSPSupported": false,
+            "metaData": [
+                ["key": "SubSessionId", "value": UUID().uuidString],
+                ["key": "wssignaling", "value": "1"],
+                ["key": "GSStreamerType", "value": "WebRTC"],
+                ["key": "networkType", "value": "Unknown"],
+                ["key": "ClientImeSupport", "value": "0"],
+                ["key": "clientPhysicalResolution", "value": "{\"horizontalPixels\":\(width),\"verticalPixels\":\(height)}"],
+                ["key": "surroundAudioInfo", "value": "2"],
+            ]
+        ]
+
         let body: [String: Any] = [
             "action": 2,
             "data": "RESUME",
-            "sessionRequestData": [String: Any](),
+            "sessionRequestData": sessionRequestData,
         ]
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"

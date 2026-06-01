@@ -369,6 +369,7 @@ struct SessionClientTests {
             serverIp: "10.0.0.1",
             token: "mock-token",
             base: "https://base.com",
+            appId: "some-app-id",
             settings: StreamSettings()
         )
         #expect(info.status == 1)
@@ -415,6 +416,7 @@ struct SessionClientTests {
             serverIp: "10.0.0.1",
             token: "mock-token",
             base: "https://base.com",
+            appId: "some-app-id",
             settings: StreamSettings()
         )
         #expect(getCalled)

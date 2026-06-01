@@ -559,6 +559,7 @@ struct StreamView: View {
                     serverIp: direct.serverIp,
                     token: token,
                     base: base,
+                    appId: game.variants.first?.appId ?? game.variants.first?.id,
                     settings: settings
                 )
                 createdSession = sessionInfo
@@ -620,6 +621,7 @@ struct StreamView: View {
                     serverIp: serverIp,
                     token: token,
                     base: base,
+                    appId: existing.appId ?? game.variants.first?.appId ?? game.variants.first?.id,
                     settings: settings
                 )
             } else {
