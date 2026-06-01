@@ -115,11 +115,6 @@ KhmNow/
 - **No App Store Release:** GeForce NOW does not have a public client API. This is a community project and must be sideloaded.
 - **7-day Re-sign limit:** Free accounts expire every 7 days; use Sideloadly or an alt server to auto-refresh the signature.
 
----
-
-## License
-
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ---
 
