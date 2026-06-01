@@ -310,6 +310,11 @@ final class CloudMatchClient {
             request.setValue(v, forHTTPHeaderField: k)
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        print("[CloudMatch] createSession: POST \(params.absoluteString)")
+        print("[CloudMatch] Request Headers: \(request.allHTTPHeaderFields ?? [:])")
+        if let bodyData = request.httpBody, let bodyString = String(data: bodyData, encoding: .utf8) {
+            print("[CloudMatch] Request Body:\n\(bodyString)")
+        }
 
         let (data, resp) = try await urlSession.data(for: request)
         if let rawString = String(data: data, encoding: .utf8) {
@@ -339,6 +344,8 @@ final class CloudMatchClient {
         for (k, v) in gfnHeaders(token: token, clientId: clientId, deviceId: deviceId, includeOrigin: false) {
             request.setValue(v, forHTTPHeaderField: k)
         }
+        print("[CloudMatch] pollSession: GET \(url.absoluteString)")
+        print("[CloudMatch] Request Headers: \(request.allHTTPHeaderFields ?? [:])")
         let (data, resp) = try await urlSession.data(for: request)
         if let rawString = String(data: data, encoding: .utf8) {
             print("[CloudMatch] pollSession Raw Response (HTTP \((resp as? HTTPURLResponse)?.statusCode ?? 0)):\n\(rawString)")
@@ -479,8 +486,17 @@ final class CloudMatchClient {
             request.setValue(v, forHTTPHeaderField: k)
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        print("[CloudMatch] claimSession: PUT \(url.absoluteString)")
+        print("[CloudMatch] Request Headers: \(request.allHTTPHeaderFields ?? [:])")
+        if let bodyData = request.httpBody, let bodyString = String(data: bodyData, encoding: .utf8) {
+            print("[CloudMatch] Request Body:\n\(bodyString)")
+        }
         let (data, resp) = try await urlSession.data(for: request)
-        guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
+        let statusCode = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if let rawString = String(data: data, encoding: .utf8) {
+            print("[CloudMatch] claimSession Raw Response (HTTP \(statusCode)):\n\(rawString)")
+        }
+        guard statusCode == 200 else {
             let msg = String(data: data, encoding: .utf8) ?? ""
             throw CloudMatchError.sessionCreateFailed("Resume failed: \(msg)")
         }
