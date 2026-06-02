@@ -101,7 +101,18 @@ final class GFNStreamController: NSObject {
 
         setupSignaling(session: session)
         do {
-            try await signaling?.connect()
+            // Run signaling connect with a 15-second timeout to prevent indefinite hangs
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await self.signaling?.connect()
+                }
+                group.addTask {
+                    try await Task.sleep(for: .seconds(15))
+                    throw SignalingError.connectionTimeout
+                }
+                try await group.next()
+                group.cancelAll()
+            }
         } catch {
             state = .failed(message: error.localizedDescription)
         }

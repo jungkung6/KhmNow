@@ -31,6 +31,7 @@ struct StreamView: View {
     // Per-ad state tracking to avoid duplicate reports
     @State private var adReportedAction: [String: AdAction] = [:]
     @State private var connectionAttempts = 0
+    @State private var hasStartedStreaming = false
 
     private let cloudMatchClient = CloudMatchClient()
 
@@ -57,15 +58,20 @@ struct StreamView: View {
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
             if !isLeavingResumable {
-                if let session = createdSession, let token = sessionToken {
-                    Task { [cloudMatchClient] in
-                        try? await cloudMatchClient.stopSession(
-                            sessionId: session.sessionId,
-                            token: token,
-                            base: session.streamingBaseUrl,
-                            clientId: session.clientId,
-                            deviceId: session.deviceId
-                        )
+                if let session = createdSession {
+                    if streamController.state == .streaming || hasStartedStreaming {
+                        isLeavingResumable = true
+                        onLeave?(game, session)
+                    } else if let token = sessionToken {
+                        Task { [cloudMatchClient] in
+                            try? await cloudMatchClient.stopSession(
+                                sessionId: session.sessionId,
+                                token: token,
+                                base: session.streamingBaseUrl,
+                                clientId: session.clientId,
+                                deviceId: session.deviceId
+                            )
+                        }
                     }
                 }
             }
@@ -98,6 +104,35 @@ struct StreamView: View {
         .onExitCommand {
             if streamController.state != .streaming {
                 disconnect()
+            }
+        }
+        .onChange(of: streamController.state) { _, newState in
+            if newState == .streaming {
+                hasStartedStreaming = true
+                if let session = createdSession {
+                    let offset = UserDefaults.standard.double(forKey: "gfn.serverTimeOffset")
+                    let serverDate = Date().addingTimeInterval(offset)
+                    viewModel.resumableSession = ResumableSession(
+                        game: game,
+                        session: session,
+                        leftAtServerTime: serverDate,
+                        gracePeriod: 120
+                    )
+                    viewModel.saveResumableSession()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            if let session = createdSession, (streamController.state == .streaming || hasStartedStreaming) {
+                let offset = UserDefaults.standard.double(forKey: "gfn.serverTimeOffset")
+                let serverDate = Date().addingTimeInterval(offset)
+                viewModel.resumableSession = ResumableSession(
+                    game: game,
+                    session: session,
+                    leftAtServerTime: serverDate,
+                    gracePeriod: 120
+                )
+                viewModel.saveResumableSession()
             }
         }
     }
@@ -569,14 +604,34 @@ struct StreamView: View {
                 let streamingBaseUrl = provider?.streamingServiceUrl ?? NVIDIAAuth.defaultStreamingUrl
                 let base = streamingBaseUrl.hasSuffix("/") ? String(streamingBaseUrl.dropLast()) : streamingBaseUrl
 
-                var sessionInfo = try await cloudMatchClient.claimSession(
-                    sessionId: direct.sessionId,
-                    serverIp: direct.serverIp,
-                    token: token,
-                    base: base,
-                    appId: game.variants.first?.appId ?? game.variants.first?.id,
-                    settings: settings
-                )
+                var sessionInfo: SessionInfo
+                do {
+                    sessionInfo = try await cloudMatchClient.claimSession(
+                        sessionId: direct.sessionId,
+                        serverIp: direct.serverIp,
+                        token: token,
+                        base: base,
+                        appId: game.variants.first?.appId ?? game.variants.first?.id,
+                        internalTitle: game.title,
+                        settings: settings,
+                        subSessionId: direct.subSessionId
+                    )
+                } catch {
+                    viewModel.markSessionExpired(direct.sessionId)
+                    try? await cloudMatchClient.stopSession(
+                        sessionId: direct.sessionId,
+                        token: token,
+                        base: base
+                    )
+                    if !direct.serverIp.isEmpty {
+                        try? await cloudMatchClient.stopSession(
+                            sessionId: direct.sessionId,
+                            token: token,
+                            base: "https://\(direct.serverIp)"
+                        )
+                    }
+                    throw error
+                }
                 createdSession = sessionInfo
 
                 // Poll until ready, requiring 2 consecutive ready polls (status 2/3) to ensure server media is fully up.
@@ -587,6 +642,10 @@ struct StreamView: View {
                     if Date().timeIntervalSince(start) > timeout {
                         loadingPhase = .timedOut
                         return
+                    }
+                    if sessionInfo.status == 0 {
+                        viewModel.markSessionExpired(sessionInfo.sessionId)
+                        throw CloudMatchError.sessionCreateFailed("Session was terminated by the server.")
                     }
                     if sessionInfo.status == 2 || sessionInfo.status == 3 {
                         readyStreak += 1
@@ -639,14 +698,31 @@ struct StreamView: View {
 
             if let existing = existingSession, let serverIp = existing.serverIp {
                 // Resume path: attach to the existing session without creating a new one
-                sessionInfo = try await cloudMatchClient.claimSession(
-                    sessionId: existing.sessionId,
-                    serverIp: serverIp,
-                    token: token,
-                    base: base,
-                    appId: existing.appId ?? game.variants.first?.appId ?? game.variants.first?.id,
-                    settings: settings
-                )
+                do {
+                    sessionInfo = try await cloudMatchClient.claimSession(
+                        sessionId: existing.sessionId,
+                        serverIp: serverIp,
+                        token: token,
+                        base: base,
+                        appId: existing.appId ?? game.variants.first?.appId ?? game.variants.first?.id,
+                        internalTitle: game.title,
+                        settings: settings,
+                        subSessionId: viewModel.resumableSession?.session.sessionId == existing.sessionId ? viewModel.resumableSession?.session.subSessionId : nil
+                    )
+                } catch {
+                    viewModel.markSessionExpired(existing.sessionId)
+                    try? await cloudMatchClient.stopSession(
+                        sessionId: existing.sessionId,
+                        token: token,
+                        base: base
+                    )
+                    try? await cloudMatchClient.stopSession(
+                        sessionId: existing.sessionId,
+                        token: token,
+                        base: "https://\(serverIp)"
+                    )
+                    throw error
+                }
             } else {
                 // New session path
                 guard let appId = game.variants.first?.appId ?? game.variants.first?.id else { return }
@@ -667,13 +743,30 @@ struct StreamView: View {
                 do {
                     sessionInfo = try await cloudMatchClient.createSession(request)
                 } catch CloudMatchError.sessionCreateFailed(let msg) where msg.contains("SESSION_LIMIT_EXCEEDED") {
-                    // Stale server session is blocking creation — stop all active sessions and retry once.
+                    // Stale server session is blocking creation — stop all active sessions and retry with backoff.
                     let staleSessions = (try? await cloudMatchClient.getActiveSessions(token: token, base: base)) ?? []
                     for stale in staleSessions {
-                        let staleBase = stale.serverIp.map { "https://\($0)" } ?? base
-                        try? await cloudMatchClient.stopSession(sessionId: stale.sessionId, token: token, base: staleBase)
+                        try? await cloudMatchClient.stopSession(sessionId: stale.sessionId, token: token, base: base)
+                        if let serverIp = stale.serverIp, !serverIp.isEmpty {
+                            let staleBase = "https://\(serverIp)"
+                            if staleBase != base {
+                                try? await cloudMatchClient.stopSession(sessionId: stale.sessionId, token: token, base: staleBase)
+                            }
+                        }
                     }
-                    sessionInfo = try await cloudMatchClient.createSession(request)
+                    
+                    var retryCount = 0
+                    let maxRetries = 3
+                    while true {
+                        do {
+                            print("[StreamView] Retrying session creation after stopSession (attempt \(retryCount + 1))...")
+                            try await Task.sleep(for: .seconds(2))
+                            sessionInfo = try await cloudMatchClient.createSession(request)
+                            break
+                        } catch CloudMatchError.sessionCreateFailed(let retryMsg) where retryMsg.contains("SESSION_LIMIT_EXCEEDED") && retryCount < maxRetries {
+                            retryCount += 1
+                        }
+                    }
                 }
             }
             createdSession = sessionInfo
@@ -696,6 +789,11 @@ struct StreamView: View {
                         return
                     }
                     loadingPhase = .preparing
+                }
+
+                if sessionInfo.status == 0 {
+                    viewModel.markSessionExpired(sessionInfo.sessionId)
+                    throw CloudMatchError.sessionCreateFailed("Session is inactive or not found on server.")
                 }
 
                 if sessionInfo.status == 2 || sessionInfo.status == 3 {

@@ -39,6 +39,15 @@ private nonisolated struct CloudMatchResponse: Decodable {
         let connectionInfo: [ConnectionInfo]?
         let iceServerConfiguration: IceServerConfig?
         let sessionControlInfo: SessionControlInfo?
+        let sessionRequestData: SessionRequestDataPayload?
+
+        struct SessionRequestDataPayload: Decodable {
+            let metaData: [MetaDataItem]?
+            struct MetaDataItem: Decodable {
+                let key: String
+                let value: String?
+            }
+        }
 
         struct SeatSetupInfo: Decodable {
             let queuePosition: Int?
@@ -145,7 +154,8 @@ private nonisolated func buildSessionRequestData(
     internalTitle: String?,
     settings: StreamSettings,
     deviceHashId: String,
-    accountLinked: Bool
+    accountLinked: Bool,
+    subSessionId: String? = nil
 ) -> [String: Any] {
     let resolutionParts = settings.resolution.split(separator: "x")
     let width = Int(resolutionParts.first ?? "1920") ?? 1920
@@ -184,7 +194,7 @@ private nonisolated func buildSessionRequestData(
         "useOps": true,
         "audioMode": 2,
         "metaData": [
-            ["key": "SubSessionId", "value": UUID().uuidString],
+            ["key": "SubSessionId", "value": subSessionId ?? UUID().uuidString],
             ["key": "wssignaling", "value": "1"],
             ["key": "GSStreamerType", "value": "WebRTC"],
             ["key": "networkType", "value": "Unknown"],
@@ -403,15 +413,21 @@ final class CloudMatchClient {
 
     // MARK: Poll Session
 
-    func pollSession(sessionId: String, token: String, base: String, serverIp: String?,
-                     clientId: String, deviceId: String) async throws -> SessionInfo {
+    private func pollSessionWithRawResponse(
+        sessionId: String,
+        token: String,
+        base: String,
+        serverIp: String?,
+        clientId: String,
+        deviceId: String
+    ) async throws -> (SessionInfo, Data) {
         let effectiveBase = serverIp.map { "https://\($0)" } ?? base
         let url = URL(string: "\(effectiveBase)/v2/session/\(sessionId)")!
         var request = URLRequest(url: url)
         for (k, v) in gfnHeaders(token: token, clientId: clientId, deviceId: deviceId, includeOrigin: false) {
             request.setValue(v, forHTTPHeaderField: k)
         }
-        print("[CloudMatch] pollSession: GET \(url.absoluteString)")
+        print("[CloudMatch] pollSessionWithRawResponse: GET \(url.absoluteString)")
         print("[CloudMatch] Request Headers: \(request.allHTTPHeaderFields ?? [:])")
         let (data, resp) = try await urlSession.data(for: request)
         updateServerTimeOffset(from: resp)
@@ -419,7 +435,21 @@ final class CloudMatchClient {
             print("[CloudMatch] pollSession Raw Response (HTTP \((resp as? HTTPURLResponse)?.statusCode ?? 0)):\n\(rawString)")
         }
         let payload = try JSONDecoder().decode(CloudMatchResponse.self, from: data)
-        return try toSessionInfo(base: effectiveBase, payload: payload, rawData: data, clientId: clientId, deviceId: deviceId)
+        let info = try toSessionInfo(base: effectiveBase, payload: payload, rawData: data, clientId: clientId, deviceId: deviceId)
+        return (info, data)
+    }
+
+    func pollSession(sessionId: String, token: String, base: String, serverIp: String?,
+                     clientId: String, deviceId: String) async throws -> SessionInfo {
+        let (info, _) = try await pollSessionWithRawResponse(
+            sessionId: sessionId,
+            token: token,
+            base: base,
+            serverIp: serverIp,
+            clientId: clientId,
+            deviceId: deviceId
+        )
+        return info
     }
 
     // MARK: Stop Session
@@ -511,14 +541,16 @@ final class CloudMatchClient {
         token: String,
         base: String,
         appId: String?,
-        settings: StreamSettings
+        internalTitle: String? = nil,
+        settings: StreamSettings,
+        subSessionId: String? = nil
     ) async throws -> SessionInfo {
         let clientId = Self.persistentClientId
         let deviceId = Self.persistentDeviceId
         let effectiveBase = "https://\(serverIp)"
 
-        // Pre-flight: get current session state
-        let preflight = try await pollSession(
+        // Pre-flight: get current session state and raw response data
+        let (preflight, rawData) = try await pollSessionWithRawResponse(
             sessionId: sessionId,
             token: token,
             base: effectiveBase,
@@ -538,12 +570,25 @@ final class CloudMatchClient {
         ]
         guard let url = comps.url else { throw CloudMatchError.sessionCreateFailed("Invalid resume URL") }
 
-        let requestData = buildSessionRequestData(
+        // Extract raw sessionRequestData directly from server pre-flight response
+        // to guarantee a 100% exact match and prevent UNKNOWN 8A8C0000 errors.
+        var serverReqData: [String: Any]? = nil
+        if let json = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any],
+           let session = json["session"] as? [String: Any],
+           let reqData = session["sessionRequestData"] as? [String: Any] {
+            serverReqData = reqData
+            print("[CloudMatch] Re-using server-returned sessionRequestData for RESUME PUT")
+        } else {
+            print("[CloudMatch] Warning: failed to parse sessionRequestData from pre-flight response, falling back to local generation")
+        }
+
+        let requestData = serverReqData ?? buildSessionRequestData(
             appId: appId ?? "",
-            internalTitle: nil,
+            internalTitle: internalTitle,
             settings: settings,
             deviceHashId: Self.persistentDeviceHashId,
-            accountLinked: true
+            accountLinked: true,
+            subSessionId: subSessionId
         )
 
         let body: [String: Any] = [
@@ -642,8 +687,11 @@ final class CloudMatchClient {
         // Ad state — parse raw JSON for flexibility since ad schema varies
         let adState = extractAdState(from: rawData)
 
+        let subSessionId = s.sessionRequestData?.metaData?.first(where: { $0.key == "SubSessionId" })?.value
+
         return SessionInfo(
             sessionId: s.sessionId,
+            subSessionId: subSessionId,
             status: s.status,
             zone: "",
             streamingBaseUrl: base,

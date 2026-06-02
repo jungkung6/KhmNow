@@ -164,8 +164,6 @@ final class GFNSignalingClient {
                 break  // connected — stop trying candidates
             } catch {
                 lastError = error
-                let desc = "\(error)"
-                guard desc.contains("53") || desc.contains("ECONNABORTED") else { break }
                 conn.cancel()
                 connection = nil
                 try? await Task.sleep(for: .milliseconds(200))
@@ -429,9 +427,20 @@ final class GFNSignalingClient {
 
 // MARK: - Errors
 
-enum SignalingError: Error {
+enum SignalingError: Error, LocalizedError {
     case invalidUrl(String)
     case handshakeFailed(String)
     case remoteClosed
     case cancelled
+    case connectionTimeout
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidUrl(let url): return "Invalid URL: \(url)"
+        case .handshakeFailed(let msg): return "Handshake failed: \(msg)"
+        case .remoteClosed: return "Connection closed by remote server."
+        case .cancelled: return "Connection cancelled."
+        case .connectionTimeout: return "Signaling connection timed out."
+        }
+    }
 }

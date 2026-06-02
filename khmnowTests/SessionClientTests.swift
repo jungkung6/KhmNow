@@ -424,6 +424,55 @@ struct SessionClientTests {
         #expect(info.status == 3)
     }
 
+    @Test func testCloudMatchClientClaimSessionFailure8A8C() async throws {
+        let client = CloudMatchClient(urlSession: mockSession)
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            if request.httpMethod == "GET" {
+                let json = """
+                {
+                    "session": {
+                        "sessionId": "sess-failed-8a8c",
+                        "status": 2
+                    }
+                }
+                """
+                return (makeHTTPResponse(url: url), json.data(using: .utf8)!)
+            } else if request.httpMethod == "PUT" {
+                let json = """
+                {
+                    "session": {
+                        "sessionId": "sess-failed-8a8c",
+                        "status": 0
+                    },
+                    "requestStatus": {
+                        "statusCode": 0,
+                        "statusDescription": "UNKNOWN 8A8C0000",
+                        "unifiedErrorCode": 0
+                    }
+                }
+                """
+                return (makeHTTPResponse(url: url, statusCode: 400), json.data(using: .utf8)!)
+            }
+            throw URLError(.badURL)
+        }
+
+        do {
+            _ = try await client.claimSession(
+                sessionId: "sess-failed-8a8c",
+                serverIp: "10.0.0.1",
+                token: "mock-token",
+                base: "https://base.com",
+                appId: "some-app-id",
+                settings: StreamSettings()
+            )
+            Issue.record("Expected claimSession to fail, but it succeeded")
+        } catch {
+            let desc = error.localizedDescription
+            #expect(desc.contains("UNKNOWN 8A8C0000"))
+        }
+    }
+
     @Test func testCloudMatchClientReportAdEvent() async {
         let client = CloudMatchClient(urlSession: mockSession)
         var putCalled = false

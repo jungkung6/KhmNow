@@ -142,6 +142,7 @@ nonisolated struct SessionAdState: Codable, Equatable {
 
 nonisolated struct SessionInfo: Codable, Equatable {
     let sessionId: String
+    let subSessionId: String?
     let status: Int
     let zone: String
     let streamingBaseUrl: String
@@ -156,6 +157,42 @@ nonisolated struct SessionInfo: Codable, Equatable {
     let clientId: String
     let deviceId: String
     let adState: SessionAdState?
+
+    init(
+        sessionId: String,
+        subSessionId: String? = nil,
+        status: Int,
+        zone: String,
+        streamingBaseUrl: String,
+        serverIp: String,
+        signalingServer: String,
+        signalingUrl: String,
+        gpuType: String?,
+        queuePosition: Int?,
+        seatSetupStep: Int?,
+        iceServers: [IceServer],
+        mediaConnectionInfo: MediaConnectionInfo?,
+        clientId: String,
+        deviceId: String,
+        adState: SessionAdState?
+    ) {
+        self.sessionId = sessionId
+        self.subSessionId = subSessionId
+        self.status = status
+        self.zone = zone
+        self.streamingBaseUrl = streamingBaseUrl
+        self.serverIp = serverIp
+        self.signalingServer = signalingServer
+        self.signalingUrl = signalingUrl
+        self.gpuType = gpuType
+        self.queuePosition = queuePosition
+        self.seatSetupStep = seatSetupStep
+        self.iceServers = iceServers
+        self.mediaConnectionInfo = mediaConnectionInfo
+        self.clientId = clientId
+        self.deviceId = deviceId
+        self.adState = adState
+    }
 
     /// True while the session is sitting in the GFN queue (no timeout applies).
     var isInQueue: Bool {
