@@ -740,15 +740,18 @@ struct StreamView: View {
         // Intentional end — clear any pending resumable session
         viewModel.clearResumableSession()
         // Tell the server to stop the session so it doesn't linger
-        if let session = createdSession, let token = sessionToken {
-            Task {
-                try? await cloudMatchClient.stopSession(
-                    sessionId: session.sessionId,
-                    token: token,
-                    base: session.streamingBaseUrl,
-                    clientId: session.clientId,
-                    deviceId: session.deviceId
-                )
+        if let session = createdSession {
+            viewModel.markSessionExpired(session.sessionId)
+            if let token = sessionToken {
+                Task {
+                    try? await cloudMatchClient.stopSession(
+                        sessionId: session.sessionId,
+                        token: token,
+                        base: session.streamingBaseUrl,
+                        clientId: session.clientId,
+                        deviceId: session.deviceId
+                    )
+                }
             }
         }
         createdSession = nil

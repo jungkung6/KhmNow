@@ -32,11 +32,14 @@ class GamesViewModel {
     var subscription: SubscriptionInfo? = nil
     /// Session the user left without ending — available to resume for ~2 minutes.
     var resumableSession: ResumableSession? = nil
+    var expiredSessionIds: Set<String> = []
 
-    private let gamesClient = GamesClient()
-    private let cloudMatchClient = CloudMatchClient()
+    private let gamesClient: GamesClient
+    private let cloudMatchClient: CloudMatchClient
 
-    init() {
+    init(urlSession: URLSession = .gfnShared) {
+        self.gamesClient = GamesClient(urlSession: urlSession)
+        self.cloudMatchClient = CloudMatchClient(urlSession: urlSession)
         if let data = UserDefaults.standard.data(forKey: "gfn.favoriteIds"),
            let ids = try? JSONDecoder().decode([String].self, from: data) {
             self.favoriteIds = Set(ids)
@@ -53,9 +56,17 @@ class GamesViewModel {
            let settings = try? JSONDecoder().decode(StreamSettings.self, from: data) {
             self.streamSettings = settings
         }
+        if let ids = UserDefaults.standard.stringArray(forKey: "gfn.expiredSessionIds") {
+            self.expiredSessionIds = Set(ids)
+        }
         if let data = UserDefaults.standard.data(forKey: "gfn.resumableSession"),
            let resumable = try? JSONDecoder().decode(ResumableSession.self, from: data) {
-            self.resumableSession = resumable
+            if self.expiredSessionIds.contains(resumable.session.sessionId) {
+                self.resumableSession = nil
+                UserDefaults.standard.removeObject(forKey: "gfn.resumableSession")
+            } else {
+                self.resumableSession = resumable
+            }
         }
         // tvOS currently caps at 60 Hz; clamp any saved value to the screen maximum.
         // If Apple raises the cap in a future tvOS release this will automatically unlock.
@@ -149,7 +160,14 @@ class GamesViewModel {
             }
 
             // Non-fatal — may fail if no active sessions or server returns 404
-            activeSessions = (try? await cloudMatchClient.getActiveSessions(token: token, base: base)) ?? []
+            let rawActiveSessions = (try? await cloudMatchClient.getActiveSessions(token: token, base: base)) ?? []
+            let serverSessionIds = Set(rawActiveSessions.map { $0.sessionId })
+            let expiredToRemove = expiredSessionIds.filter { !serverSessionIds.contains($0) }
+            if !expiredToRemove.isEmpty {
+                expiredSessionIds.subtract(expiredToRemove)
+                UserDefaults.standard.set(Array(expiredSessionIds), forKey: "gfn.expiredSessionIds")
+            }
+            activeSessions = rawActiveSessions.filter { !expiredSessionIds.contains($0.sessionId) }
             if !activeSessions.isEmpty || resumableSession != nil {
                 await validateActiveSession(authManager: authManager)
             }
@@ -171,7 +189,14 @@ class GamesViewModel {
         guard let token = try? await authManager.resolveToken() else { return }
         let streamingUrl = authManager.session?.provider.streamingServiceUrl ?? NVIDIAAuth.defaultStreamingUrl
         let base = streamingUrl.hasSuffix("/") ? String(streamingUrl.dropLast()) : streamingUrl
-        activeSessions = (try? await cloudMatchClient.getActiveSessions(token: token, base: base)) ?? []
+        let rawActiveSessions = (try? await cloudMatchClient.getActiveSessions(token: token, base: base)) ?? []
+        let serverSessionIds = Set(rawActiveSessions.map { $0.sessionId })
+        let expiredToRemove = expiredSessionIds.filter { !serverSessionIds.contains($0) }
+        if !expiredToRemove.isEmpty {
+            expiredSessionIds.subtract(expiredToRemove)
+            UserDefaults.standard.set(Array(expiredSessionIds), forKey: "gfn.expiredSessionIds")
+        }
+        activeSessions = rawActiveSessions.filter { !expiredSessionIds.contains($0.sessionId) }
         if !activeSessions.isEmpty || resumableSession != nil {
             await validateActiveSession(authManager: authManager)
         }
@@ -196,9 +221,7 @@ class GamesViewModel {
         
         do {
             try await cloudMatchClient.stopSession(sessionId: session.sessionId, token: token, base: effectiveBase)
-            if resumableSession?.session.sessionId == session.sessionId {
-                clearResumableSession()
-            }
+            markSessionExpired(session.sessionId)
             await refreshActiveSessions(authManager: authManager)
         } catch {
             self.error = "Failed to terminate session: \(error.localizedDescription)"
@@ -275,12 +298,33 @@ class GamesViewModel {
     }
 
     func clearResumableSession() {
+        if let sessionId = resumableSession?.session.sessionId {
+            expiredSessionIds.insert(sessionId)
+            UserDefaults.standard.set(Array(expiredSessionIds), forKey: "gfn.expiredSessionIds")
+            activeSessions.removeAll { $0.sessionId == sessionId }
+        }
         resumableSession = nil
         UserDefaults.standard.removeObject(forKey: "gfn.resumableSession")
     }
 
+    func markSessionExpired(_ sessionId: String) {
+        expiredSessionIds.insert(sessionId)
+        UserDefaults.standard.set(Array(expiredSessionIds), forKey: "gfn.expiredSessionIds")
+        activeSessions.removeAll { $0.sessionId == sessionId }
+        if resumableSession?.session.sessionId == sessionId {
+            clearResumableSession()
+        }
+    }
+
     func validateActiveSession(authManager: AuthManager) async {
         guard let sessionId = resumableSession?.session.sessionId ?? activeSessions.first?.sessionId else {
+            return
+        }
+        guard !expiredSessionIds.contains(sessionId) else {
+            print("[GamesViewModel] Session \(sessionId) is blocklisted. Skipping validation.")
+            if resumableSession?.session.sessionId == sessionId {
+                clearResumableSession()
+            }
             return
         }
         guard let token = try? await authManager.resolveToken() else { return }
@@ -300,6 +344,10 @@ class GamesViewModel {
             
             print("[GamesViewModel] Session \(sessionId) validation succeeded. Status: \(sessionInfo.status)")
             if sessionInfo.status == 1 || sessionInfo.status == 2 || sessionInfo.status == 3 {
+                if expiredSessionIds.contains(sessionInfo.sessionId) {
+                    print("[GamesViewModel] Validated session \(sessionInfo.sessionId) is blocklisted. Skipping creation/update.")
+                    return
+                }
                 // If we don't have a local resumableSession, or the sessionId changed, create one
                 if resumableSession == nil || resumableSession?.session.sessionId != sessionInfo.sessionId {
                     if let game = game(for: ActiveSessionInfo(sessionId: sessionInfo.sessionId, status: sessionInfo.status, appId: nil, serverIp: sessionInfo.serverIp, signalingUrl: sessionInfo.signalingUrl)) {
